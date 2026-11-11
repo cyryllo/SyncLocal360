@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.tmp
+dist/
+core.*
+
+# ustawienia lokalne (ścieżki z tego komputera)
+synclocal_settings.json
+
+# oryginalne zrzuty z prywatnymi danymi (nazwy klientów, nazwa huba);
+# na stronie i w README są wersje z rozmyciem w docs/img/
+docs/Aplikacja.png
+docs/kopia z chmury.png
+docs/przywracanie.png
+
+# notatki robocze (prywatne)
+CLAUDE.md

@@ -1,0 +1,27 @@
+[package]
+name = "synclocal360-galeria"
+version = "0.1.0"
+description = "SyncLocal360 - galeria lokalnych kopii projektów"
+edition = "2021"
+
+[lib]
+name = "synclocal360_galeria_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+shell-words = "1"
+percent-encoding = "2"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

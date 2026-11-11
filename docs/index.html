@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SyncLocal360 – projekty z Fusion 360 na Linuksie</title>
+<meta name="description" content="Pobierz całą bazę projektów z chmury Fusion 360 na dysk (.f3d, STEP, miniatury), uporządkuj ją w galerii i otwieraj na Linuksie w FreeCAD, SolidCraft i innych programach.">
+<meta property="og:title" content="SyncLocal360 – projekty z Fusion 360 na Linuksie">
+<meta property="og:description" content="Kopia całej chmury Fusion na dysk, eksport STEP, galeria z kategoriami i otwieranie modeli w programach na Linuksa.">
+<meta property="og:image" content="img/galeria.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='1' width='6' height='6' rx='1.5' fill='%232c7be5'/%3E%3Crect x='9' y='1' width='6' height='6' rx='1.5' fill='%232c7be5' opacity='.6'/%3E%3Crect x='1' y='9' width='6' height='6' rx='1.5' fill='%232c7be5' opacity='.6'/%3E%3Crect x='9' y='9' width='6' height='6' rx='1.5' fill='%232c7be5'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --border: #e1e5eb;
+  --text: #161b26;
+  --muted: #5d6677;
+  --faint: #8b93a3;
+  --accent: #2c7be5;
+  --accent-ink: #1d5fbf;
+  --accent-soft: rgba(44, 123, 229, .1);
+  --warn-bg: #fff7e6;
+  --warn-border: #f1d08a;
+  --warn-ink: #7a5300;
+  --code-bg: #0f1724;
+  --code-ink: #dbe4f3;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 8px 24px rgba(16, 24, 40, .08);
+  --shadow-lg: 0 24px 60px rgba(16, 24, 40, .18);
+  --radius: 14px;
+  --max: 1120px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1217;
+    --surface: #171b22;
+    --surface-2: #1f242d;
+    --border: #2a303b;
+    --text: #e8ebf1;
+    --muted: #a3abba;
+    --faint: #737c8c;
+    --accent: #5b9dff;
+    --accent-ink: #8ab8ff;
+    --accent-soft: rgba(91, 157, 255, .14);
+    --warn-bg: #2a2212;
+    --warn-border: #5c4a1e;
+    --warn-ink: #f0cf86;
+    --code-bg: #0a0d12;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .3);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, .55);
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+img { max-width: 100%; display: block; }
+a { color: var(--accent-ink); }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+:not(pre) > code { font-size: .88em; background: var(--surface-2); padding: .1em .35em; border-radius: 5px; }
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
+
+/* ---------- nawigacja ---------- */
+nav.top {
+  position: sticky; top: 0; z-index: 10;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+nav.top .wrap { display: flex; align-items: center; gap: 24px; height: 60px; }
+.logo { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); text-decoration: none; font-size: 17px; }
+nav.top .links { display: flex; gap: 22px; margin-left: auto; font-size: 15px; }
+nav.top .links a { color: var(--muted); text-decoration: none; }
+nav.top .links a:hover { color: var(--text); }
+@media (max-width: 760px) { nav.top .links a:not(.gh) { display: none; } }
+
+/* ---------- przyciski ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px;
+  font-weight: 600; font-size: 16px; text-decoration: none; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); transition: transform .12s, box-shadow .12s;
+}
+.btn:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn svg { flex: none; }
+
+/* ---------- hero ---------- */
+header.hero { padding: 72px 0 40px; text-align: center; }
+.eyebrow {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 99px;
+  background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; font-size: 14px;
+}
+.hero h1 {
+  font-size: clamp(34px, 5.4vw, 58px); line-height: 1.08; letter-spacing: -.02em;
+  margin: 20px auto 18px; max-width: 900px;
+}
+.hero h1 span { color: var(--accent); }
+.hero .lead { font-size: clamp(17px, 2vw, 20px); color: var(--muted); max-width: 720px; margin: 0 auto 30px; }
+.cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.note { color: var(--faint); font-size: 14px; margin-top: 16px; }
+.shot {
+  margin: 52px auto 0; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border); background: var(--surface); max-width: 1060px;
+}
+.shot .bar { display: flex; gap: 7px; padding: 11px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.shot .bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--border); display: block; }
+.shot a { display: block; }
+
+/* ---------- sekcje ---------- */
+section { padding: 80px 0; }
+section.alt { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.kicker { color: var(--accent-ink); font-weight: 700; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; }
+h2 { font-size: clamp(28px, 3.4vw, 40px); line-height: 1.15; letter-spacing: -.015em; margin: 8px 0 14px; }
+.sub { color: var(--muted); font-size: 18px; max-width: 700px; margin: 0 0 40px; }
+
+/* trzy zalety */
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 56px; text-align: left; }
+.fact { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+.fact b { display: block; font-size: 17px; margin-bottom: 4px; }
+.fact span { color: var(--muted); font-size: 15px; }
+@media (max-width: 760px) { .facts { grid-template-columns: 1fr; } }
+
+/* kroki */
+.steps { display: grid; gap: 28px; counter-reset: step; }
+.step {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 40px; align-items: center;
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px;
+}
+section:not(.alt) .step { background: var(--surface); }
+.step h3 { font-size: 23px; margin: 10px 0 8px; }
+.step h3::before {
+  counter-increment: step; content: counter(step);
+  display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 17px; margin-right: 12px; vertical-align: 2px;
+}
+.step p { color: var(--muted); margin: 0 0 10px; }
+.step ul { margin: 6px 0 0; padding-left: 20px; color: var(--muted); }
+.step .media { display: grid; gap: 14px; }
+.step .media img { border-radius: 10px; border: 1px solid var(--border); box-shadow: var(--shadow); }
+.sync-art {
+  display: flex; align-items: center; justify-content: center; gap: 18px; padding: 36px 16px;
+  border-radius: 12px; background: var(--surface-2); color: var(--muted); font-weight: 600; flex-wrap: wrap;
+}
+.sync-art .box {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px;
+  display: grid; justify-items: center; gap: 6px; min-width: 130px; font-size: 15px; color: var(--text);
+}
+.sync-art .box small { color: var(--faint); font-weight: 500; }
+.sync-art .arrow { color: var(--accent); font-size: 26px; }
+@media (max-width: 860px) { .step { grid-template-columns: 1fr; padding: 24px; gap: 24px; } }
+
+/* funkcje */
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; }
+section.alt .card { background: var(--bg); }
+.card h3 { margin: 0 0 4px; font-size: 22px; display: flex; align-items: center; gap: 10px; }
+.card .where { color: var(--faint); font-size: 14px; margin-bottom: 16px; }
+.feat { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.feat li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; }
+.feat li svg { margin-top: 4px; color: var(--accent); }
+.feat b { display: block; }
+.feat span { color: var(--muted); font-size: 15.5px; }
+.gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 28px; }
+.gallery figure { margin: 0; }
+.gallery img { border-radius: 10px; border: 1px solid var(--border); box-shadow: var(--shadow); }
+.gallery figcaption { color: var(--faint); font-size: 14px; margin-top: 8px; }
+@media (max-width: 860px) { .cols, .gallery { grid-template-columns: 1fr; } }
+
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.dialogs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 32px; align-items: start; }
+.dialogs figure { margin: 0; }
+.dialogs img { border-radius: 10px; border: 1px solid var(--border); box-shadow: var(--shadow); margin: 0 auto; }
+.dialogs figcaption { color: var(--muted); font-size: 14.5px; margin-top: 10px; }
+@media (max-width: 860px) { .dialogs { grid-template-columns: 1fr; } .pair { grid-template-columns: 1fr; } }
+
+/* ograniczenia */
+.warn {
+  background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: var(--radius);
+  padding: 26px 28px; color: var(--text);
+}
+.warn h3 { margin: 0 0 12px; color: var(--warn-ink); font-size: 19px; display: flex; gap: 10px; align-items: center; }
+.warn ul { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.warn li b { font-weight: 650; }
+
+/* instalacja */
+pre {
+  background: var(--code-bg); color: var(--code-ink); padding: 16px 18px; border-radius: 10px;
+  overflow-x: auto; font-size: 14px; line-height: 1.55; margin: 12px 0 0;
+}
+.card ol { padding-left: 20px; margin: 10px 0 0; display: grid; gap: 8px; color: var(--muted); }
+.card ol b { color: var(--text); }
+.card table { width: 100%; border-collapse: collapse; font-size: 14.5px; margin-top: 14px; }
+.card td { padding: 7px 0; border-top: 1px solid var(--border); vertical-align: top; }
+.card td:first-child { color: var(--muted); padding-right: 14px; white-space: nowrap; }
+
+/* FAQ */
+details { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0 22px; margin-bottom: 12px; }
+summary { cursor: pointer; font-weight: 600; padding: 18px 0; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "+"; color: var(--accent); font-size: 22px; line-height: 1; }
+details[open] summary::after { content: "–"; }
+details p { color: var(--muted); margin: 0 0 18px; }
+
+/* stopka */
+footer { padding: 48px 0 64px; color: var(--muted); font-size: 15px; border-top: 1px solid var(--border); }
+footer .wrap { display: grid; gap: 10px; }
+footer small { color: var(--faint); }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="wrap">
+    <a class="logo" href="#">
+      <svg width="24" height="24" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5" fill="#2c7be5"/><rect x="9" y="1" width="6" height="6" rx="1.5" fill="#2c7be5" opacity=".55"/><rect x="1" y="9" width="6" height="6" rx="1.5" fill="#2c7be5" opacity=".55"/><rect x="9" y="9" width="6" height="6" rx="1.5" fill="#2c7be5"/></svg>
+      SyncLocal360
+    </a>
+    <div class="links">
+      <a href="#jak">Jak to działa</a>
+      <a href="#funkcje">Funkcje</a>
+      <a href="#fusion">W Fusion</a>
+      <a href="#ograniczenia">Ograniczenia</a>
+      <a href="#instalacja">Instalacja</a>
+      <a class="gh" data-gh="repo" href="#instalacja">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">Fusion 360 → dysk → Linux</span>
+    <h1>Zabierz swoje projekty z&nbsp;Fusion 360 <span>na&nbsp;Linuksa</span></h1>
+    <p class="lead">SyncLocal360 pobiera całą bazę projektów z chmury Fusion na Twój dysk
+      – pliki <code>.f3d</code>, <code>.step</code> i miniatury – a potem pozwala ją przeglądać,
+      porządkować i otwierać w programach dostępnych na Linuksie.</p>
+    <div class="cta">
+      <a class="btn primary" data-gh="releases" href="#instalacja">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+        Pobierz
+      </a>
+      <a class="btn" href="#jak">Jak to działa</a>
+    </div>
+    <p class="note">Darmowe i otwarte. Dane zostają w zwykłych plikach na Twoim dysku.</p>
+
+    <div class="shot">
+      <div class="bar"><i></i><i></i><i></i></div>
+      <a href="img/galeria.png"><img src="img/galeria.png" width="1600" height="1000"
+        alt="Galeria SyncLocal360: siatka miniatur projektów, kategorie po lewej, szczegóły projektu i przyciski otwierania w SolidCraft i FreeCAD po prawej"></a>
+    </div>
+
+    <div class="facts">
+      <div class="fact"><b>Cała chmura na dysku</b><span>Projekty i foldery jak w Fusion, najnowsza wersja każdego pliku, opcjonalnie STEP obok <code>.f3d</code>.</span></div>
+      <div class="fact"><b>Odporne na awarie</b><span>Każdy plik zapisuje się od razu. Po przerwie kopia z „Pomiń” dokańcza tylko to, czego brakuje.</span></div>
+      <div class="fact"><b>Bez zamykania danych</b><span>Zwykłe foldery i pliki <code>config.json</code>. Synchronizujesz je czym chcesz: Nextcloud, Syncthing, dysk USB.</span></div>
+    </div>
+  </div>
+</header>
+
+<section id="jak" class="alt">
+  <div class="wrap">
+    <div class="kicker">Jak to działa</div>
+    <h2>Trzy kroki od chmury Fusion do Linuksa</h2>
+    <p class="sub">Pobieranie odbywa się w Fusion (Windows lub macOS), a pracujesz już na Linuksie –
+      na tych samych plikach.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div>
+          <h3>Pobierz projekty z chmury</h3>
+          <p>Zainstaluj dodatek w Fusion. Na karcie <b>Bryła</b> pojawi się panel SyncLocal360.
+            Kliknij <b>Kopia z chmury</b>, zaznacz projekty i włącz eksport do STEP.</p>
+          <ul>
+            <li>pliki otwierają się w tle, jeden po drugim,</li>
+            <li>postęp i log zapisywany na bieżąco,</li>
+            <li>można przerwać i wznowić w dowolnym momencie.</li>
+          </ul>
+        </div>
+        <div class="media">
+          <img src="ikony.png" width="695" height="120" alt="Panel SyncLocal360 na pasku narzędzi Fusion: Szybki Zapis, Kopia z chmury, Przywróć do chmury, Galeria, Ustawienia" loading="lazy">
+          <div class="pair">
+            <img src="img/fusion-kopia.png" width="581" height="661" alt="Okno Kopia z chmury w Fusion: folder docelowy, eksport do STEP, pomijanie zapisanych plików i lista projektów do zaznaczenia" loading="lazy">
+            <img src="img/kopia-postep.png" width="590" height="142" alt="Okno postępu kopii: 455 z 461 plików" loading="lazy">
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div>
+          <h3>Przenieś folder na Linuksa</h3>
+          <p>Folder z kopiami to zwykłe pliki. Ustaw go w folderze synchronizowanym z Linuksem
+            albo po prostu skopiuj na dysk.</p>
+          <ul>
+            <li>Nextcloud, Syncthing, dysk sieciowy, pendrive,</li>
+            <li>kategorie i notatki podróżują razem z plikami.</li>
+          </ul>
+        </div>
+        <div class="media">
+          <div class="sync-art" aria-hidden="true">
+            <div class="box">Fusion<small>Windows / macOS</small></div>
+            <span class="arrow">→</span>
+            <div class="box">Folder kopii<small>.f3d · .step · .png</small></div>
+            <span class="arrow">→</span>
+            <div class="box">Galeria<small>Linux</small></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div>
+          <h3>Przeglądaj i otwieraj na Linuksie</h3>
+          <p>Uruchom Galerię (AppImage) i wskaż folder. Szukaj, porządkuj w kategorie,
+            a dwuklikiem otwieraj STEP w wybranym programie – FreeCAD, SolidCraft lub innym.</p>
+        </div>
+        <div class="media">
+          <a href="img/galeria-solidcraft.png"><img src="img/galeria-solidcraft.png" width="2000" height="806" alt="Model domku ze STEP otwarty z galerii w SolidCraft na Linuksie" loading="lazy"></a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="funkcje">
+  <div class="wrap">
+    <div class="kicker">Funkcje</div>
+    <h2>Dwa narzędzia, jeden folder</h2>
+    <p class="sub">Dodatek pobiera i zapisuje, galeria porządkuje i otwiera. Oba widzą te same kategorie i notatki.</p>
+
+    <div class="cols">
+      <div class="card">
+        <h3>Dodatek do Fusion</h3>
+        <div class="where">Windows / macOS, w Autodesk Fusion</div>
+        <ul class="feat">
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Kopia z chmury</b><span>Całe projekty albo wybrane pliki, struktura folderów jak w chmurze.</span></div></li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Eksport STEP</b><span>Plik <code>.step</code> obok każdego <code>.f3d</code> – do otwarcia w innych programach CAD.</span></div></li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Miniatury</b><span>Podgląd z chmury Fusion dla każdego projektu, także z polskimi znakami w nazwie.</span></div></li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Wznawianie</b><span>„Pomiń pliki już zapisane” pobiera tylko nowe i zmienione – oraz brakujące STEP i miniatury.</span></div></li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Przywracanie do chmury</b><span>Wgrywa kopie z powrotem, np. na nowe konto, zakładając projekty i foldery (eksperymentalne).</span></div></li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Szybki Zapis i autozapis</b><span>Lokalna kopia aktywnego projektu jednym kliknięciem.</span></div></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Galeria na Linuksie</h3>
+        <div class="where">AppImage – bez instalacji, bez Fusion</div>
+        <ul class="feat">
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Szybkie przeglądanie</b><span>Setki projektów w siatce miniatur, wyszukiwanie po nazwie, folderze, etykiecie i notatce.</span></div></li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Kategorie, etykiety, notatki</b><span>Klawisze 1–9 albo przeciąganie przypisują kategorię wielu projektom naraz.</span></div></li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Otwieranie w Twoich programach</b><span>Lista programów z poleceniami, wybór programu na dwuklik.</span></div></li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Poprawny widok w FreeCAD</b><span>Model otwiera się dopasowany do okna, w widoku izometrycznym.</span></div></li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Jasny i ciemny motyw</b><span>Dopasowuje się do ustawień systemu.</span></div></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="gallery">
+      <figure>
+        <a href="img/zaznaczanie.png"><img src="img/zaznaczanie.png" width="1600" height="1000" alt="Zaznaczone cztery wentylatory i panel przypisywania kategorii wszystkim naraz" loading="lazy"></a>
+        <figcaption>Porządkowanie wielu projektów naraz.</figcaption>
+      </figure>
+      <figure>
+        <a href="img/ustawienia.png"><img src="img/ustawienia.png" width="1600" height="1000" alt="Okno ustawień: folder kopii i lista programów SolidCraft i FreeCAD z wyborem programu na dwuklik" loading="lazy"></a>
+        <figcaption>Programy do otwierania plików i wybór programu na dwuklik.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="fusion" class="alt">
+  <div class="wrap">
+    <div class="kicker">Po stronie Fusion</div>
+    <h2>Galeria działa też w Fusion</h2>
+    <p class="sub">Na komputerze z Fusion przycisk <b>Galeria</b> otwiera tę samą galerię w przeglądarce –
+      z przyciskami <b>Otwórz w Fusion</b> i <b>Wstaw do projektu</b>. Kategorie są wspólne z Linuksem.</p>
+    <div class="shot" style="margin-top:0">
+      <div class="bar"><i></i><i></i><i></i></div>
+      <a href="img/galeria-fusion.png"><img src="img/galeria-fusion.png" width="1600" height="875" alt="Galeria SyncLocal360 w ciemnym motywie na Windowsie, połączona z Fusion: 704 projekty, 10,56 GB" loading="lazy"></a>
+    </div>
+    <div class="dialogs">
+      <figure>
+        <a href="img/fusion-kopia.png"><img src="img/fusion-kopia.png" width="581" height="661" alt="Okno Kopia z chmury" loading="lazy"></a>
+        <figcaption><b>Kopia z chmury</b> – wybór projektów, STEP, pomijanie zapisanych.</figcaption>
+      </figure>
+      <figure>
+        <a href="img/fusion-przywracanie.png"><img src="img/fusion-przywracanie.png" width="475" height="545" alt="Okno Przywróć do chmury: katalog źródłowy, 704 pliki w 4 projektach" loading="lazy"></a>
+        <figcaption><b>Przywróć do chmury</b> – wgrywa kopie z powrotem, np. na nowe konto.</figcaption>
+      </figure>
+      <figure>
+        <a href="img/fusion-ustawienia.png"><img src="img/fusion-ustawienia.png" width="434" height="295" alt="Okno ustawień dodatku: folder zapisu, autozapis, wersjonowanie" loading="lazy"></a>
+        <figcaption><b>Ustawienia</b> – folder kopii, autozapis, wersje.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="ograniczenia">
+  <div class="wrap">
+    <div class="kicker">Zanim zaczniesz</div>
+    <h2>Co warto wiedzieć o migracji</h2>
+    <p class="sub">Uczciwie o tym, czego narzędzie nie zrobi – żeby nic Cię nie zaskoczyło po przejściu na Linuksa.</p>
+    <div class="warn">
+      <h3><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>Ograniczenia</h3>
+      <ul>
+        <li><b>Plik <code>.f3d</code> otworzy tylko Fusion.</b> Na Linuksie pracujesz na <code>.step</code>.</li>
+        <li><b>STEP to sama geometria</b> – bez historii operacji, parametrów i szkiców z Fusion. Zachowaj <code>.f3d</code> na wypadek powrotu.</li>
+        <li><b>Do pobrania potrzebny jest Fusion</b> na Windows lub macOS – dodatek korzysta z jego API. Na Linuksie samego Fusion nie ma.</li>
+        <li>Kopia obejmuje <b>aktywny hub</b> (zespół) i <b>najnowszą wersję</b> każdego pliku, bez historii wersji z chmury.</li>
+        <li>Obsługiwane są projekty 3D (<code>.f3d</code>). Rysunki <code>.f2d</code> i pliki elektroniki są pomijane.</li>
+        <li><b>Przywracanie do chmury</b> jest eksperymentalne – przetestuj je najpierw na jednym małym projekcie.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="instalacja" class="alt">
+  <div class="wrap">
+    <div class="kicker">Instalacja</div>
+    <h2>Pobierz i zainstaluj</h2>
+    <p class="sub">Obie części są w zakładce <a data-gh="releases" href="#instalacja">Releases</a> na GitHubie.</p>
+    <div class="cols">
+      <div class="card">
+        <h3>Dodatek do Fusion</h3>
+        <div class="where">plik <code>SyncLocal360_&lt;wersja&gt;.zip</code></div>
+        <ol>
+          <li>Rozpakuj ZIP. W środku jest folder <b>SyncLocal360</b> – nie zmieniaj jego nazwy.</li>
+          <li>W Fusion naciśnij <b>Shift+S</b> → <b>Dodatki</b> → <b>„+”</b> i wskaż ten folder.</li>
+          <li>Kliknij <b>Uruchom</b> (opcjonalnie „Uruchamiaj przy starcie”).</li>
+          <li>W <b>Ustawieniach</b> dodatku wybierz folder na kopie.</li>
+        </ol>
+      </div>
+      <div class="card">
+        <h3>Galeria na Linuksie</h3>
+        <div class="where">plik <code>SyncLocal360 Galeria_&lt;wersja&gt;_amd64.AppImage</code></div>
+        <ol>
+          <li>Nadaj prawo wykonywania i uruchom:</li>
+        </ol>
+<pre>chmod +x SyncLocal360*.AppImage
+./SyncLocal360*.AppImage</pre>
+        <ol start="2">
+          <li>Kliknij <b>Folder…</b> i wskaż folder z kopiami.</li>
+          <li>W ustawieniach (zębatka) dodaj programy, np.:</li>
+        </ol>
+        <table>
+          <tr><td>FreeCAD (Flatpak)</td><td><code>flatpak run org.freecad.FreeCAD %f</code></td></tr>
+          <tr><td>Dowolny AppImage</td><td><code>~/Aplikacje/Program.AppImage %f</code></td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">Pytania</div>
+    <h2>Częste pytania</h2>
+    <details>
+      <summary>Ile trwa pobranie całej bazy?</summary>
+      <p>Każdy plik jest otwierany i eksportowany przez Fusion, więc zależy to od wielkości modeli.
+        Przykładowo ok. 700 plików (ok. 11 GB razem ze STEP) zajęło kilka godzin.</p>
+    </details>
+    <details>
+      <summary>Fusion zawiesił się w trakcie kopii. Co teraz?</summary>
+      <p>Uruchom Fusion ponownie i puść kopię jeszcze raz z zaznaczonym „Pomiń pliki już zapisane”.
+        Każdy plik zapisuje się od razu, więc nic nie przepada, a kopia dokończy tylko brakujące pliki.</p>
+    </details>
+    <details>
+      <summary>Czym otworzę modele na Linuksie?</summary>
+      <p>Pliki <code>.step</code> otworzy m.in. FreeCAD i SolidCraft. Galeria pozwala dodać dowolny
+        program przez polecenie z <code>%f</code> i wybrać, który uruchamia się po dwukliku.</p>
+    </details>
+    <details>
+      <summary>Czy mogę wrócić do Fusion?</summary>
+      <p>Tak. Plik <code>.f3d</code> zawiera cały projekt z historią. „Przywróć do chmury” wgra kopie
+        z powrotem – także na inne konto.</p>
+    </details>
+    <details>
+      <summary>Gdzie zapisują się kategorie i notatki?</summary>
+      <p>W pliku <code>config.json</code> każdego projektu, a lista kategorii w <code>synclocal_gallery.json</code>
+        w folderze kopii. Dzięki temu galeria w Fusion i na Linuksie widzą to samo.</p>
+    </details>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>SyncLocal360 powstał na bazie dodatku <b>NoCloud2</b> autorstwa <b>Kamila Sokalskiego</b>
+      (<a href="https://modelowanie3d.org">modelowanie3d.org</a>), udostępnionego na licencji otwartej
+      z wymogiem uznania autorstwa.</div>
+    <small>Niezależny projekt społecznościowy, niezwiązany z Autodesk, Inc. „Autodesk Fusion” i „Fusion 360”
+      są znakami towarowymi Autodesk, Inc.</small>
+  </div>
+</footer>
+
+<script>
+// Linki do repozytorium wyliczane z adresu GitHub Pages: <użytkownik>.github.io/<repo>/
+(function () {
+  var m = /^([^.]+)\.github\.io$/i.exec(location.hostname);
+  var repo = location.pathname.split('/').filter(Boolean)[0];
+  if (!m || !repo) return;   // poza GitHub Pages linki prowadzą do sekcji „Instalacja”
+  var base = 'https://github.com/' + m[1] + '/' + repo;
+  document.querySelectorAll('[data-gh]').forEach(function (a) {
+    a.href = a.getAttribute('data-gh') === 'releases' ? base + '/releases/latest' : base;
+  });
+})();
+</script>
+</body>
+</html>

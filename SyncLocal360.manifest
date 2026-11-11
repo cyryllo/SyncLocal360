@@ -1,0 +1,13 @@
+{
+	"autodeskProduct":	"Fusion",
+	"type":	"addin",
+	"id":	"SyncLocal360",
+	"author":	"SyncLocal360 - na bazie NoCloud2 (Kamil Sokalski, modelowanie3d.org)",
+	"description":	{
+		"":	"Lokalne kopie projektów Fusion: szybki zapis, wsadowa kopia z chmury (.f3d / .step) i przywracanie projektów do chmury."
+	},
+	"version":	"1.0.0",
+	"runOnStartup":	true,
+	"supportedOS":	"windows|mac",
+	"editEnabled":	true
+}

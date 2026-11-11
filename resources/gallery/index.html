@@ -1,0 +1,1232 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SyncLocal360 Galeria</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='1' width='6' height='6' rx='1.5' fill='%232c7be5'/%3E%3Crect x='9' y='1' width='6' height='6' rx='1.5' fill='%232c7be5' opacity='.6'/%3E%3Crect x='1' y='9' width='6' height='6' rx='1.5' fill='%232c7be5' opacity='.6'/%3E%3Crect x='9' y='9' width='6' height='6' rx='1.5' fill='%232c7be5'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f3f4f6;
+  --surface: #ffffff;
+  --surface-2: #f8f9fb;
+  --thumb: #eceef2;
+  --border: #e1e4ea;
+  --border-strong: #c9ced8;
+  --text: #1c2230;
+  --muted: #687082;
+  --faint: #9aa1b0;
+  --accent: #2c7be5;
+  --accent-soft: rgba(44, 123, 229, .12);
+  --accent-text: #ffffff;
+  --star: #e8a317;
+  --danger: #d9443b;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .08);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, .18);
+  --tile: 190px;
+  --radius: 10px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171c;
+    --surface: #1d2027;
+    --surface-2: #23272f;
+    --thumb: #2a2e37;
+    --border: #2f343e;
+    --border-strong: #414753;
+    --text: #e7e9ee;
+    --muted: #9aa1ae;
+    --faint: #6d7482;
+    --accent: #4d94ff;
+    --accent-soft: rgba(77, 148, 255, .16);
+    --accent-text: #0b1220;
+    --star: #f2b73a;
+    --danger: #ff6b5f;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- górny pasek ---------- */
+header {
+  display: flex; align-items: center; gap: 14px; min-width: 0;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+.brand { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 0 1 auto; }
+.brand > div { min-width: 0; }
+.brand svg { flex: none; }
+.brand b { font-size: 15px; font-weight: 650; white-space: nowrap; }
+.brand small { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 32vw; display: block; font-size: 12px; }
+.search {
+  flex: 1 1 160px; min-width: 120px; max-width: 520px; position: relative; margin-left: auto;
+}
+.search input {
+  width: 100%; height: 34px; padding: 0 34px 0 32px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2);
+}
+.search input:focus { border-color: var(--accent); outline: none; background: var(--surface); }
+.search svg { position: absolute; left: 10px; top: 9px; color: var(--faint); pointer-events: none; }
+.search kbd { position: absolute; right: 8px; top: 7px; }
+kbd {
+  font: 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 3px 5px; border: 1px solid var(--border-strong); border-bottom-width: 2px;
+  border-radius: 4px; color: var(--muted); background: var(--surface);
+}
+.tools { display: flex; align-items: center; gap: 8px; }
+select.ctl, button.ctl {
+  height: 34px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); padding: 0 10px;
+}
+button.ctl:hover, select.ctl:hover { border-color: var(--border-strong); }
+button.icon { width: 34px; padding: 0; display: grid; place-items: center; }
+input[type=range] { width: 90px; accent-color: var(--accent); }
+.badge {
+  font-size: 12px; padding: 3px 8px; border-radius: 99px; white-space: nowrap;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--muted);
+}
+.badge.on { color: #1a7f45; border-color: rgba(26,127,69,.35); background: rgba(26,127,69,.08); }
+@media (prefers-color-scheme: dark) { .badge.on { color: #5fd28f; } }
+
+/* ---------- układ ---------- */
+.layout {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr) 340px;
+  min-height: 0;
+}
+aside.side, main, aside.panel { overflow-y: auto; overflow-x: hidden; min-height: 0; min-width: 0; }
+
+/* ---------- pasek boczny ---------- */
+aside.side {
+  background: var(--surface); border-right: 1px solid var(--border);
+  padding: 12px 10px 24px;
+}
+.sec {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 16px 8px 6px; font-size: 11px; font-weight: 650; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--faint);
+}
+.sec:first-child { margin-top: 4px; }
+.sec button {
+  border: 0; background: none; color: var(--muted); padding: 2px 6px; border-radius: 6px;
+  font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 500;
+}
+.sec button:hover { background: var(--surface-2); color: var(--accent); }
+.row {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 6px 8px; border: 0; border-radius: 7px; background: none; text-align: left;
+  color: var(--text); position: relative;
+}
+.row:hover { background: var(--surface-2); }
+.row.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.row .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .cnt { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+.row.active .cnt { color: var(--accent); }
+.row .edit {
+  display: none; border: 0; background: none; color: var(--muted); padding: 0 2px;
+  border-radius: 4px; line-height: 1;
+}
+.row:hover .edit { display: block; }
+.row:hover .cnt { display: none; }
+.row .edit:hover { color: var(--accent); }
+.row.drop { outline: 2px dashed var(--accent); outline-offset: -2px; background: var(--accent-soft); }
+.dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.ico { width: 14px; height: 14px; flex: none; color: var(--muted); }
+.row.active .ico { color: var(--accent); }
+.hint { color: var(--faint); font-size: 12px; padding: 4px 8px; }
+
+/* ---------- siatka ---------- */
+main { padding: 14px 16px 80px; }
+.status {
+  display: flex; align-items: center; gap: 10px; margin: 0 2px 12px; color: var(--muted); font-size: 13px;
+  min-height: 24px; flex-wrap: wrap;
+}
+.status .chipf {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 9px; border-radius: 99px;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text); font-size: 12px;
+}
+.status .chipf button { border: 0; background: none; color: var(--muted); padding: 0 4px; font-size: 14px; line-height: 1; }
+.grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile), 1fr));
+}
+.card {
+  position: relative; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow);
+  cursor: default; user-select: none; transition: border-color .1s, box-shadow .1s;
+}
+.card:hover { border-color: var(--border-strong); }
+.card.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.card .th {
+  position: relative; aspect-ratio: 1 / 1; background: var(--thumb);
+  display: grid; place-items: center; overflow: hidden;
+}
+/* position:absolute + inset:0: WebKit (aplikacja na Linuksa) nie liczy height:100%
+   wewnątrz pola z aspect-ratio i obrazek wychodził poza ramkę. */
+.card .th img, .pthumb img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block;
+}
+.card .th .ph { color: var(--faint); display: grid; justify-items: center; gap: 4px; font-size: 11px; }
+.card .meta { padding: 8px 10px 10px; }
+.card .nm { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .sub { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; min-height: 0; }
+.chip {
+  display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
+  font-size: 11px; line-height: 1; padding: 4px 7px; border-radius: 99px;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.chip .dot { width: 7px; height: 7px; }
+.chip.tag { color: var(--muted); }
+.card .star, .card .check {
+  position: absolute; top: 7px; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; border: 0;
+  background: color-mix(in srgb, var(--surface) 88%, transparent); box-shadow: var(--shadow);
+  opacity: 0; transition: opacity .1s;
+}
+.card .star { right: 7px; color: var(--faint); font-size: 15px; }
+.card .star.on { color: var(--star); opacity: 1; }
+.card .check { left: 7px; color: transparent; }
+.card:hover .star, .card:hover .check, .card.sel .check { opacity: 1; }
+.card .check::after {
+  content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border-strong);
+}
+.card.sel .check { background: var(--accent); }
+.card.sel .check::after {
+  border: 0; width: 12px; height: 7px; border-radius: 0;
+  border-left: 2px solid var(--accent-text); border-bottom: 2px solid var(--accent-text);
+  transform: translateY(-2px) rotate(-45deg);
+}
+.empty { text-align: center; color: var(--muted); padding: 60px 20px; }
+.empty b { display: block; color: var(--text); font-size: 15px; margin-bottom: 4px; }
+
+/* ---------- panel szczegółów ---------- */
+aside.panel {
+  background: var(--surface); border-left: 1px solid var(--border); padding: 16px 16px 40px;
+}
+.pthumb {
+  position: relative; aspect-ratio: 4 / 3; background: var(--thumb); border-radius: var(--radius);
+  display: grid; place-items: center; overflow: hidden; margin-bottom: 12px;
+}
+.panel h2 { font-size: 17px; margin: 0 0 2px; line-height: 1.3; word-break: break-word; }
+.panel .path { color: var(--muted); font-size: 12.5px; word-break: break-word; }
+.panel h3 {
+  font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--faint); margin: 18px 0 8px;
+}
+.actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.btn {
+  height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--surface); display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
+}
+.btn:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.07); background: var(--accent); }
+.btn.danger { color: var(--danger); }
+.btn.on { color: var(--star); }
+.catpick { display: flex; flex-wrap: wrap; gap: 6px; }
+.catpick button {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 99px;
+  border: 1px solid var(--border); background: var(--surface); font-size: 12.5px;
+}
+.catpick button:hover { border-color: var(--border-strong); }
+.catpick button.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.catpick button.add { color: var(--muted); border-style: dashed; }
+.catpick .key {
+  font: 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--faint);
+  padding: 2px 4px; border: 1px solid var(--border); border-radius: 3px; margin-left: 2px;
+}
+.tagbox {
+  display: flex; flex-wrap: wrap; gap: 5px; padding: 6px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--surface-2); align-items: center;
+}
+.tagbox:focus-within { border-color: var(--accent); }
+.tagbox .chip { background: var(--surface); padding-right: 3px; }
+.tagbox .chip button { border: 0; background: none; color: var(--muted); padding: 0 3px; font-size: 13px; line-height: 1; }
+.tagbox .chip button:hover { color: var(--danger); }
+.tagbox input { flex: 1; min-width: 90px; border: 0; background: none; outline: none; padding: 3px 4px; font-size: 13px; }
+textarea {
+  width: 100%; min-height: 84px; resize: vertical; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); font-size: 13px;
+}
+textarea:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 13px; }
+dt { color: var(--muted); }
+dd { margin: 0; word-break: break-word; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+.summary { color: var(--muted); }
+.summary .big { font-size: 28px; font-weight: 700; color: var(--text); line-height: 1.1; }
+.bars { display: grid; gap: 7px; margin-top: 4px; }
+.bar { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; font-size: 12.5px; color: var(--text); }
+.bar i { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; display: block; }
+.bar i span { display: block; height: 100%; border-radius: 3px; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; font-size: 12.5px; color: var(--muted); align-items: center; }
+.keys kbd { justify-self: start; }
+
+/* ---------- okno kategorii, powiadomienia ---------- */
+dialog {
+  border: 1px solid var(--border); border-radius: 12px; padding: 18px; width: min(360px, 92vw);
+  background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg);
+}
+dialog::backdrop { background: rgba(10, 14, 22, .45); }
+dialog h3 { margin: 0 0 12px; font-size: 16px; }
+dialog label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 5px; }
+dialog input[type=text] {
+  width: 100%; height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-2);
+}
+dialog input[type=text]:focus { outline: none; border-color: var(--accent); }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatches button { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; padding: 0; }
+.swatches button.active { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text); }
+.dlgbtns { display: flex; gap: 8px; margin-top: 18px; }
+dialog.wide { width: min(680px, 94vw); }
+.vaultrow { display: flex; gap: 8px; align-items: center; }
+.vaultrow .mono { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+#setRecent { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+#setRecent button {
+  border: 1px solid var(--border); background: var(--surface-2); border-radius: 99px;
+  padding: 3px 10px; font-size: 12px; color: var(--muted); max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#setRecent button:hover { color: var(--accent); border-color: var(--accent); }
+.approw { display: grid; grid-template-columns: auto 1fr 2fr 1fr auto; gap: 6px; margin-bottom: 6px; align-items: center; }
+.approw.head { margin-bottom: 2px; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.approw.sys { grid-template-columns: auto 1fr; color: var(--muted); font-size: 13px; }
+.dbl { display: flex; align-items: center; justify-content: center; width: 54px; cursor: pointer; }
+.dbl input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; cursor: pointer; }
+.approw input { height: 32px; padding: 0 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-2); min-width: 0; }
+.approw input:focus { outline: none; border-color: var(--accent); }
+.approw button { border: 0; background: none; color: var(--muted); font-size: 16px; padding: 0 6px; }
+.approw button:hover { color: var(--danger); }
+dialog code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--surface-2); padding: 1px 4px; border-radius: 4px; }
+.files { display: grid; gap: 8px; }
+.frow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.frow .fn { flex: 1 1 100%; display: flex; justify-content: space-between; gap: 8px; }
+.frow .fn span:first-child { font-weight: 600; }
+.frow .fn span:last-child { color: var(--muted); }
+.frow .btn { height: 28px; padding: 0 10px; font-size: 12.5px; }
+@media (max-width: 600px) { .approw { grid-template-columns: auto 1fr 1fr; } .approw.head { display: none; } }
+.dlgbtns .sp { flex: 1; }
+.toast {
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%) translateY(20px);
+  background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 9px;
+  box-shadow: var(--shadow-lg); font-size: 13px; opacity: 0; pointer-events: none;
+  transition: opacity .15s, transform .15s; max-width: 90vw; z-index: 10;
+}
+.toast.show { opacity: 1; transform: translateX(-50%); }
+.toast.err { background: var(--danger); color: #fff; }
+
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: 210px minmax(0, 1fr) 300px; }
+  .brand small, .tools .lbl-range { display: none; }
+}
+@media (max-width: 800px) {
+  body { overflow: auto; }
+  header { flex-wrap: wrap; }
+  .search { order: 3; flex-basis: 100%; max-width: none; }
+  .layout { grid-template-columns: 1fr; }
+  aside.side { border-right: 0; border-bottom: 1px solid var(--border); max-height: 40vh; }
+  aside.panel { border-left: 0; border-top: 1px solid var(--border); }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg width="22" height="22" viewBox="0 0 16 16" aria-hidden="true">
+      <rect x="1" y="1" width="6" height="6" rx="1.5" fill="var(--accent)"/>
+      <rect x="9" y="1" width="6" height="6" rx="1.5" fill="var(--accent)" opacity=".55"/>
+      <rect x="1" y="9" width="6" height="6" rx="1.5" fill="var(--accent)" opacity=".55"/>
+      <rect x="9" y="9" width="6" height="6" rx="1.5" fill="var(--accent)"/>
+    </svg>
+    <div><b>SyncLocal360 · Galeria</b><small id="vault">…</small></div>
+  </div>
+  <div class="search">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="m11 11 4 4"/></svg>
+    <input id="q" type="search" placeholder="Szukaj: nazwa, folder w chmurze, etykieta, notatka…" autocomplete="off">
+    <kbd>/</kbd>
+  </div>
+  <div class="tools">
+    <select id="sort" class="ctl" title="Sortowanie">
+      <option value="name">Nazwa A–Z</option>
+      <option value="date">Ostatnio zapisane</option>
+      <option value="cloud">Projekt i folder w chmurze</option>
+      <option value="category">Kategoria</option>
+      <option value="size">Rozmiar .f3d</option>
+    </select>
+    <input id="tile" type="range" min="130" max="320" step="10" title="Wielkość miniatur">
+    <button id="pickVault" class="ctl" title="Wybierz folder z kopiami" hidden>Folder…</button>
+    <button id="openSettings" class="ctl icon" title="Ustawienia: folder i programy do otwierania plików" hidden>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    <button id="refresh" class="ctl icon" title="Odśwież (R)">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3h-3"/></svg>
+    </button>
+    <span id="fusion" class="badge">…</span>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="side" id="side"></aside>
+  <main>
+    <div class="status" id="status"></div>
+    <div class="grid" id="grid"></div>
+    <div class="empty" id="empty" hidden></div>
+  </main>
+  <aside class="panel" id="panel"></aside>
+</div>
+
+<dialog id="catdlg">
+  <form method="dialog" id="catform">
+    <h3 id="catTitle">Nowa kategoria</h3>
+    <label for="catName">Nazwa</label>
+    <input type="text" id="catName" maxlength="60" autocomplete="off" required>
+    <label>Kolor</label>
+    <div class="swatches" id="swatches"></div>
+    <div class="dlgbtns">
+      <button type="button" class="btn danger" id="catDelete">Usuń</button>
+      <span class="sp"></span>
+      <button type="button" class="btn" id="catCancel">Anuluj</button>
+      <button type="submit" class="btn primary">Zapisz</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="setdlg" class="wide">
+  <form method="dialog" id="setform">
+    <h3>Ustawienia</h3>
+    <label>Folder z kopiami</label>
+    <div class="vaultrow"><span class="mono" id="setVault">—</span><button type="button" class="btn" id="setPick">Zmień…</button></div>
+    <div id="setRecent"></div>
+    <label>Programy do otwierania plików</label>
+    <p class="hint" style="padding:0 0 8px">Polecenie: <code>%f</code> to ścieżka pliku (bez <code>%f</code> ścieżka idzie na koniec).
+      Rozszerzenia po przecinku, puste = wszystkie pliki. Przykłady: <code>freecad %f</code>,
+      <code>flatpak run org.freecad.FreeCAD %f</code>, <code>~/Aplikacje/FreeCAD.AppImage %f</code>.</p>
+    <div id="appRows"></div>
+    <button type="button" class="btn" id="appAdd">+ Dodaj program</button>
+    <div class="dlgbtns">
+      <span class="sp"></span>
+      <button type="button" class="btn" id="setCancel">Anuluj</button>
+      <button type="submit" class="btn primary">Zapisz</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+const TOKEN = '__SYNCLOCAL_TOKEN__';
+const PALETTE = ['#2c7be5', '#16a34a', '#e8a317', '#dc4a3d', '#8b5cf6', '#db2777',
+                 '#0d9488', '#ea7317', '#64748b', '#65a30d', '#0891b2', '#a16207'];
+const REASONS = { cloud_backup: 'Kopia z chmury', manual: 'Szybki Zapis', autosave: 'Autozapis' };
+const NONE_CLOUD = '\u0000';
+
+const S = {
+  projects: [], by: new Map(), cats: [], fusion: false, vault: '',
+  app: '', apps: null, recent: [], thumbBase: '/files/', needVault: false, dblclick: null,
+  sel: new Set(), anchor: null, visible: [], lastLoad: 0,
+  f: { view: 'all', cloud: '', tag: '', q: '', sort: 'name' },
+  tile: 190,
+};
+const $ = id => document.getElementById(id);
+
+// ---------- narzędzia ----------
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const norm = s => String(s ?? '').toLowerCase().replace(/ł/g, 'l')
+  .normalize('NFD').replace(/[̀-ͯ]/g, '');
+const collator = new Intl.Collator('pl', { numeric: true, sensitivity: 'base' });
+const fileUrl = (p, name, mtime) =>
+  `${S.thumbBase}${encodeURIComponent(p.folder)}/${encodeURIComponent(name)}?v=${mtime || 0}`;
+function fmtSize(b) {
+  if (b == null) return '';
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(0) + ' KB';
+  if (b < 1073741824) return (b / 1048576).toFixed(1).replace('.', ',') + ' MB';
+  return (b / 1073741824).toFixed(2).replace('.', ',') + ' GB';
+}
+function fmtDate(s) {
+  const m = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)/.exec(s || '');
+  return m ? `${m[3]}.${m[2]}.${m[1]} ${m[4]}:${m[5]}` : (s || '—');
+}
+const plural = (n, one, few, many) => {
+  const d = n % 10, t = n % 100;
+  return n === 1 ? one : (d >= 2 && d <= 4 && (t < 12 || t > 14)) ? few : many;
+};
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('sl360.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('sl360.' + k, JSON.stringify(v)); } catch (e) {} },
+};
+let toastTimer;
+function toast(msg, err) {
+  const t = $('toast');
+  t.textContent = msg; t.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = 'toast' + (err ? ' err' : ''); }, err ? 5000 : 2200);
+}
+// Ta sama strona działa w dwóch miejscach:
+//  * dodatek Fusion / python3 synclocal_gallery.py - serwer HTTP, adresy /api/...
+//  * aplikacja na Linuksa (Tauri, katalog linux/) - komendy Rust o tych samych danych
+const TAURI = window.__TAURI__ && window.__TAURI__.core;
+const TAURI_CMD = {
+  '/api/state': 'get_state', '/api/projects': 'update_projects_cmd',
+  '/api/categories': 'save_categories_cmd', '/api/categories/rename': 'rename_category_cmd',
+  '/api/open-folder': 'open_folder', '/api/open-file': 'open_file',
+  '/api/pick-vault': 'pick_vault', '/api/set-vault': 'set_vault', '/api/settings': 'save_settings',
+};
+async function api(path, data) {
+  if (TAURI) {
+    try { return await TAURI.invoke(TAURI_CMD[path], { args: data || {} }); }
+    catch (e) { throw new Error(typeof e === 'string' ? e : (e && e.message) || String(e)); }
+  }
+  const opt = data === undefined ? {} : {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-SyncLocal-Token': TOKEN },
+    body: JSON.stringify(data),
+  };
+  let r;
+  try { r = await fetch(path, opt); }
+  catch (e) { throw new Error('Brak połączenia z galerią. Czy SyncLocal360 (albo serwer galerii) nadal działa?'); }
+  let j = {};
+  try { j = await r.json(); } catch (e) {}
+  if (!r.ok || j.ok === false) throw new Error(j.error || ('Błąd ' + r.status));
+  return j;
+}
+
+// ---------- dane ----------
+function prep(p) {
+  p._s = norm([p.name, p.folder, p.cloud_project, p.cloud_folder, p.category, p.tags.join(' '), p.note].join(' '));
+  return p;
+}
+function setProjects(list) {
+  S.projects = list.map(prep);
+  S.by = new Map(S.projects.map(p => [p.folder, p]));
+  for (const f of [...S.sel]) if (!S.by.has(f)) S.sel.delete(f);
+}
+function mergeProjects(list) {
+  for (const p of list) {
+    prep(p);
+    const old = S.by.get(p.folder);
+    if (old) S.projects[S.projects.indexOf(old)] = p; else S.projects.push(p);
+    S.by.set(p.folder, p);
+  }
+}
+// Kategorie: zdefiniowane w synclocal_gallery.json + te, które są tylko w config.json.
+function allCats() {
+  const out = S.cats.map(c => ({ ...c }));
+  const known = new Set(out.map(c => c.name));
+  const extra = [...new Set(S.projects.map(p => p.category).filter(c => c && !known.has(c)))]
+    .sort(collator.compare);
+  for (const name of extra) out.push({ name, color: '' });
+  out.forEach((c, i) => { if (!c.color) c.color = PALETTE[i % PALETTE.length]; });
+  return out;
+}
+const catColor = name => (allCats().find(c => c.name === name) || {}).color || 'var(--faint)';
+function allTags() {
+  const m = new Map();
+  for (const p of S.projects) for (const t of p.tags) m.set(t, (m.get(t) || 0) + 1);
+  return [...m.entries()].sort((a, b) => collator.compare(a[0], b[0]));
+}
+
+async function load(quiet) {
+  try {
+    const j = await api('/api/state');
+    S.vault = j.vault; S.fusion = j.fusion; S.cats = j.categories;
+    S.app = j.app || ''; S.apps = j.apps || null; S.recent = j.recent || [];
+    S.dblclick = j.dblclick ?? null;
+    S.thumbBase = j.thumb_base || '/files/';
+    S.needVault = !!j.need_vault;
+    if (j.vault_error) toast(j.vault_error, true);
+    setProjects(j.projects);
+    S.lastLoad = Date.now();
+    renderAll();
+    if (!quiet) toast(`Wczytano ${j.projects.length} ${plural(j.projects.length, 'projekt', 'projekty', 'projektów')}`);
+  } catch (e) { toast(e.message, true); }
+}
+
+async function update(folders, changes, msg) {
+  if (!folders.length) return;
+  try {
+    const j = await api('/api/projects', { folders, ...changes });
+    mergeProjects(j.projects);
+    S.cats = j.categories;
+    renderAll();
+    if (msg) toast(msg);
+  } catch (e) { toast(e.message, true); }
+}
+const selFolders = () => [...S.sel];
+function setCategory(folders, cat) {
+  const n = folders.length;
+  const who = n === 1 ? `„${S.by.get(folders[0]).name}”` : `${n} ${plural(n, 'projekt', 'projekty', 'projektów')}`;
+  return update(folders, { category: cat }, cat ? `${who} → ${cat}` : `${who}: bez kategorii`);
+}
+function setFavorite(folders, on) {
+  return update(folders, { favorite: on }, on ? 'Dodano do ulubionych' : 'Usunięto z ulubionych');
+}
+async function saveCats(cats) {
+  try { S.cats = (await api('/api/categories', { categories: cats })).categories; renderAll(); }
+  catch (e) { toast(e.message, true); }
+}
+
+// ---------- filtrowanie ----------
+function computeVisible() {
+  const f = S.f;
+  const words = norm(f.q).split(/\s+/).filter(Boolean);
+  const list = S.projects.filter(p => {
+    if (f.view === 'none' && p.category) return false;
+    if (f.view === 'fav' && !p.favorite) return false;
+    if (f.view.startsWith('cat:') && p.category !== f.view.slice(4)) return false;
+    if (f.cloud && (p.cloud_project || NONE_CLOUD) !== f.cloud) return false;
+    if (f.tag && !p.tags.includes(f.tag)) return false;
+    for (const w of words) if (!p._s.includes(w)) return false;
+    return true;
+  });
+  const byName = (a, b) => collator.compare(a.name, b.name);
+  const sorts = {
+    name: byName,
+    date: (a, b) => (b.last_saved || '').localeCompare(a.last_saved || '') || byName(a, b),
+    cloud: (a, b) => collator.compare(a.cloud_project, b.cloud_project) ||
+      collator.compare(a.cloud_folder, b.cloud_folder) || byName(a, b),
+    category: (a, b) => (!a.category - !b.category) || collator.compare(a.category, b.category) || byName(a, b),
+    size: (a, b) => ((b.files.f3d || {}).size || 0) - ((a.files.f3d || {}).size || 0) || byName(a, b),
+  };
+  list.sort(sorts[f.sort] || byName);
+  S.visible = list;
+  return list;
+}
+function setFilter(patch) {
+  Object.assign(S.f, patch);
+  store.set('filter', { view: S.f.view, cloud: S.f.cloud, tag: S.f.tag, sort: S.f.sort });
+  renderSide(); renderGrid(); renderStatus();
+  document.querySelector('main').scrollTop = 0;
+}
+
+// ---------- pasek boczny ----------
+const ICONS = {
+  all: '<svg class="ico" viewBox="0 0 16 16" fill="currentColor"><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.2"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1.2"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1.2"/><rect x="9" y="9" width="5.5" height="5.5" rx="1.2"/></svg>',
+  fav: '<svg class="ico" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.3l2 4.1 4.5.6-3.3 3.1.8 4.5L8 11.5l-4 2.1.8-4.5L1.5 6l4.5-.6z"/></svg>',
+  none: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.2 2"><circle cx="8" cy="8" r="5.5"/></svg>',
+  cloud: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4.5 12.5h7.2a3 3 0 0 0 .3-6 4 4 0 0 0-7.7.9 2.6 2.6 0 0 0 .2 5.1z"/></svg>',
+  tag: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2.5v5l6.5 6.5 5-5L7 2.5z"/><circle cx="5" cy="5.5" r="1" fill="currentColor"/></svg>',
+};
+function renderSide() {
+  const f = S.f, P = S.projects;
+  const count = pred => P.filter(pred).length;
+  const row = (attrs, inner, active, drop) =>
+    `<button class="row${active ? ' active' : ''}" ${attrs}${drop ? ` data-drop="${esc(drop)}"` : ''}>${inner}</button>`;
+  let h = '<div class="sec">Widok</div>';
+  h += row('data-view="all"', `${ICONS.all}<span class="lbl">Wszystkie</span><span class="cnt">${P.length}</span>`, f.view === 'all');
+  h += row('data-view="fav"', `${ICONS.fav}<span class="lbl">Ulubione</span><span class="cnt">${count(p => p.favorite)}</span>`, f.view === 'fav', 'fav');
+  h += row('data-view="none"', `${ICONS.none}<span class="lbl">Bez kategorii</span><span class="cnt">${count(p => !p.category)}</span>`, f.view === 'none', 'none');
+
+  h += '<div class="sec">Kategorie <button data-act="newcat" title="Nowa kategoria">+ Nowa</button></div>';
+  const cats = allCats();
+  if (!cats.length) h += '<div class="hint">Brak kategorii. Utwórz pierwszą i przeciągnij na nią projekty.</div>';
+  cats.forEach((c, i) => {
+    h += row(`data-view="cat:${esc(c.name)}"`,
+      `<span class="dot" style="background:${esc(c.color)}"></span><span class="lbl">${esc(c.name)}</span>` +
+      `<span class="cnt">${count(p => p.category === c.name)}</span>` +
+      `<span class="edit" data-editcat="${esc(c.name)}" title="Edytuj kategorię">✎</span>`,
+      f.view === 'cat:' + c.name, 'cat:' + c.name);
+  });
+
+  const clouds = new Map();
+  for (const p of P) { const k = p.cloud_project || NONE_CLOUD; clouds.set(k, (clouds.get(k) || 0) + 1); }
+  if (clouds.size) {
+    h += '<div class="sec">Projekt w chmurze</div>';
+    for (const [k, n] of [...clouds.entries()].sort((a, b) => collator.compare(a[0], b[0]))) {
+      h += row(`data-cloud="${esc(k)}"`, `${ICONS.cloud}<span class="lbl">${k === NONE_CLOUD ? '<i>Szybki Zapis</i>' : esc(k)}</span><span class="cnt">${n}</span>`, f.cloud === k);
+    }
+  }
+  const tags = allTags();
+  if (tags.length) {
+    h += '<div class="sec">Etykiety</div>';
+    for (const [t, n] of tags) h += row(`data-tag="${esc(t)}"`, `${ICONS.tag}<span class="lbl">${esc(t)}</span><span class="cnt">${n}</span>`, f.tag === t);
+  }
+  $('side').innerHTML = h;
+}
+$('side').addEventListener('click', e => {
+  const ed = e.target.closest('[data-editcat]');
+  if (ed) { e.stopPropagation(); return openCatDialog(ed.dataset.editcat); }
+  if (e.target.closest('[data-act="newcat"]')) return openCatDialog(null);
+  const r = e.target.closest('.row'); if (!r) return;
+  if (r.dataset.view) setFilter({ view: r.dataset.view });
+  else if (r.dataset.cloud != null) setFilter({ cloud: S.f.cloud === r.dataset.cloud ? '' : r.dataset.cloud });
+  else if (r.dataset.tag != null) setFilter({ tag: S.f.tag === r.dataset.tag ? '' : r.dataset.tag });
+});
+// Przeciąganie projektów na kategorię / ulubione / bez kategorii
+let dragFolders = null;
+$('side').addEventListener('dragover', e => {
+  const r = e.target.closest('[data-drop]'); if (!r || !dragFolders) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('.row.drop').forEach(x => x !== r && x.classList.remove('drop'));
+  r.classList.add('drop');
+});
+$('side').addEventListener('dragleave', e => {
+  const r = e.target.closest('[data-drop]'); if (r && !r.contains(e.relatedTarget)) r.classList.remove('drop');
+});
+$('side').addEventListener('drop', e => {
+  const r = e.target.closest('[data-drop]'); if (!r || !dragFolders) return;
+  e.preventDefault(); r.classList.remove('drop');
+  const d = r.dataset.drop, folders = dragFolders; dragFolders = null;
+  if (d === 'fav') setFavorite(folders, true);
+  else if (d === 'none') setCategory(folders, '');
+  else setCategory(folders, d.slice(4));
+});
+
+// ---------- siatka ----------
+const cardCache = new Map();  // folder -> {el, sig}
+function cardSig(p) {
+  return JSON.stringify([p.name, p.category, p.category && catColor(p.category), p.tags, p.favorite,
+    p.cloud_project, p.cloud_folder, (p.files.png || {}).mtime]);
+}
+const PH = '<div class="ph"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M12 2.8 20 7.4v9.2l-8 4.6-8-4.6V7.4z"/><path d="M4 7.4 12 12l8-4.6M12 12v9.2"/></svg>brak miniatury</div>';
+function makeCard(p) {
+  const el = document.createElement('div');
+  el.className = 'card'; el.dataset.f = p.folder; el.draggable = true;
+  const img = p.files.png
+    ? `<img loading="lazy" decoding="async" alt="" src="${esc(fileUrl(p, p.files.png.name, p.files.png.mtime))}">`
+    : PH;
+  const sub = p.cloud_project ? [p.cloud_project, p.cloud_folder].filter(Boolean).join(' / ') : 'Szybki Zapis';
+  let chips = '';
+  if (p.category) chips += `<span class="chip"><span class="dot" style="background:${esc(catColor(p.category))}"></span>${esc(p.category)}</span>`;
+  for (const t of p.tags.slice(0, 3)) chips += `<span class="chip tag">#${esc(t)}</span>`;
+  if (p.tags.length > 3) chips += `<span class="chip tag">+${p.tags.length - 3}</span>`;
+  el.innerHTML =
+    `<div class="th">${img}</div>` +
+    `<button class="check" title="Zaznacz (Ctrl+klik)" aria-label="Zaznacz"></button>` +
+    `<button class="star${p.favorite ? ' on' : ''}" title="Ulubione (F)" aria-label="Ulubione">${p.favorite ? '★' : '☆'}</button>` +
+    `<div class="meta"><div class="nm" title="${esc(p.name)}">${esc(p.name)}</div>` +
+    `<div class="sub" title="${esc(sub)}">${esc(sub)}</div>` +
+    (chips ? `<div class="chips">${chips}</div>` : '') + `</div>`;
+  return el;
+}
+function renderGrid() {
+  const list = computeVisible();
+  const frag = document.createDocumentFragment();
+  for (const p of list) {
+    const sig = cardSig(p);
+    let c = cardCache.get(p.folder);
+    if (!c || c.sig !== sig) { c = { el: makeCard(p), sig }; cardCache.set(p.folder, c); }
+    c.el.classList.toggle('sel', S.sel.has(p.folder));
+    frag.appendChild(c.el);
+  }
+  $('grid').replaceChildren(frag);
+  const empty = $('empty');
+  empty.hidden = list.length > 0;
+  if (!list.length) {
+    empty.innerHTML = S.needVault
+      ? '<b>Wybierz folder z kopiami projektów</b>To folder, do którego SyncLocal360 zapisuje kopie (np. zsynchronizowany przez Nextcloud).' +
+        '<div class="actions" style="justify-content:center;margin-top:14px"><button class="btn primary" data-act="pickvault">Wybierz folder…</button></div>'
+      : S.projects.length
+      ? '<b>Nic nie pasuje do filtrów</b>Zmień wyszukiwanie albo wybierz „Wszystkie”.'
+      : `<b>Brak projektów w folderze kopii</b><span class="mono">${esc(S.vault)}</span><br>Zrób kopię z chmury albo Szybki Zapis, potem odśwież.`;
+  }
+}
+function renderStatus() {
+  const f = S.f, n = S.visible.length;
+  let h = `<span>${n} z ${S.projects.length}</span>`;
+  const chip = (label, key) => `<span class="chipf">${label}<button data-clear="${key}" title="Usuń filtr">×</button></span>`;
+  if (f.view === 'fav') h += chip('Ulubione', 'view');
+  if (f.view === 'none') h += chip('Bez kategorii', 'view');
+  if (f.view.startsWith('cat:')) h += chip(`<span class="dot" style="background:${esc(catColor(f.view.slice(4)))}"></span>${esc(f.view.slice(4))}`, 'view');
+  if (f.cloud) h += chip(f.cloud === NONE_CLOUD ? 'Szybki Zapis' : '☁ ' + esc(f.cloud), 'cloud');
+  if (f.tag) h += chip('#' + esc(f.tag), 'tag');
+  if (f.q) h += chip('„' + esc(f.q) + '”', 'q');
+  $('status').innerHTML = h;
+}
+$('status').addEventListener('click', e => {
+  const b = e.target.closest('[data-clear]'); if (!b) return;
+  const k = b.dataset.clear;
+  if (k === 'q') { $('q').value = ''; }
+  setFilter({ [k]: k === 'view' ? 'all' : '' });
+});
+
+function selectOnly(f) { S.sel = new Set([f]); S.anchor = f; }
+$('grid').addEventListener('click', e => {
+  const card = e.target.closest('.card');
+  if (!card) return;
+  const f = card.dataset.f;
+  if (e.target.closest('.star')) return setFavorite([f], !S.by.get(f).favorite);
+  if (e.shiftKey && S.anchor) {
+    const ids = S.visible.map(p => p.folder);
+    let a = ids.indexOf(S.anchor), b = ids.indexOf(f);
+    if (a < 0) a = b;
+    if (!(e.ctrlKey || e.metaKey)) S.sel = new Set();
+    for (let i = Math.min(a, b); i <= Math.max(a, b); i++) S.sel.add(ids[i]);
+  } else if (e.ctrlKey || e.metaKey || e.target.closest('.check')) {
+    S.sel.has(f) ? S.sel.delete(f) : S.sel.add(f);
+    S.anchor = f;
+  } else {
+    selectOnly(f);
+  }
+  renderSelection();
+});
+$('grid').addEventListener('dblclick', e => {
+  const card = e.target.closest('.card');
+  if (card && !e.target.closest('.star, .check')) openDefault(S.by.get(card.dataset.f));
+});
+document.querySelector('main').addEventListener('click', e => {
+  if (e.target.closest('[data-act="pickvault"]')) return pickVault();
+  if (!e.target.closest('.card') && !e.target.closest('.status') && S.sel.size) {
+    S.sel.clear(); renderSelection();
+  }
+});
+$('grid').addEventListener('dragstart', e => {
+  const card = e.target.closest('.card'); if (!card) return;
+  const f = card.dataset.f;
+  if (!S.sel.has(f)) { selectOnly(f); renderSelection(); }
+  dragFolders = selFolders();
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', dragFolders.map(x => S.by.get(x).name).join('\n'));
+});
+$('grid').addEventListener('dragend', () => {
+  dragFolders = null;
+  document.querySelectorAll('.row.drop').forEach(x => x.classList.remove('drop'));
+});
+function renderSelection() {
+  for (const [f, c] of cardCache) c.el.classList.toggle('sel', S.sel.has(f));
+  renderPanel();
+}
+
+// ---------- panel ----------
+function catPicker(current, mixed) {
+  const cats = allCats();
+  let h = '<div class="catpick">';
+  h += `<button data-setcat="" class="${!mixed && !current ? 'active' : ''}" title="Skrót: 0">Brak <span class="key">0</span></button>`;
+  cats.forEach((c, i) => {
+    h += `<button data-setcat="${esc(c.name)}" class="${!mixed && current === c.name ? 'active' : ''}"${i < 9 ? ` title="Skrót: ${i + 1}"` : ''}>` +
+      `<span class="dot" style="background:${esc(c.color)}"></span>${esc(c.name)}` +
+      (i < 9 ? ` <span class="key">${i + 1}</span>` : '') + `</button>`;
+  });
+  h += '<button class="add" data-act="newcat-assign">+ Nowa…</button></div>';
+  return h;
+}
+function tagList() {
+  return `<datalist id="alltags">${allTags().map(([t]) => `<option value="${esc(t)}">`).join('')}</datalist>`;
+}
+function renderPanel() {
+  const panel = $('panel');
+  const focusId = document.activeElement && panel.contains(document.activeElement) ? document.activeElement.id : null;
+  const n = S.sel.size;
+  if (n === 0) panel.innerHTML = summaryHtml();
+  else if (n === 1) panel.innerHTML = detailHtml(S.by.get([...S.sel][0]));
+  else panel.innerHTML = bulkHtml();
+  if (focusId && $(focusId)) $(focusId).focus();
+}
+function summaryHtml() {
+  const P = S.projects;
+  const none = P.filter(p => !p.category).length;
+  const total = P.reduce((s, p) => s + ((p.files.f3d || {}).size || 0) + ((p.files.step || {}).size || 0), 0);
+  let h = `<div class="summary"><div class="big">${P.length}</div>${plural(P.length, 'projekt', 'projekty', 'projektów')} · ${fmtSize(total)} na dysku</div>`;
+  h += '<h3>Kategorie</h3><div class="bars">';
+  const max = Math.max(1, P.length);
+  for (const c of allCats()) {
+    const k = P.filter(p => p.category === c.name).length;
+    h += `<div class="bar"><span>${esc(c.name)}</span><span class="cnt">${k}</span><i><span style="width:${k / max * 100}%;background:${esc(c.color)}"></span></i></div>`;
+  }
+  h += `<div class="bar"><span style="color:var(--muted)">Bez kategorii</span><span class="cnt">${none}</span><i><span style="width:${none / max * 100}%;background:var(--border-strong)"></span></i></div></div>`;
+  h += `<h3>Jak przypisywać</h3>
+    <div class="keys">
+      <kbd>klik</kbd><span>pokaż szczegóły projektu</span>
+      <kbd>dwuklik</kbd><span>otwórz (${S.fusion ? 'w Fusion' : S.apps ? 'program z ustawień' : 'program systemu'})</span>
+      <kbd>Ctrl+klik</kbd><span>zaznacz kilka</span>
+      <kbd>Shift+klik</kbd><span>zaznacz zakres</span>
+      <kbd>Ctrl+A</kbd><span>zaznacz widoczne</span>
+      <kbd>1–9</kbd><span>przypisz kategorię zaznaczonym</span>
+      <kbd>0</kbd><span>usuń kategorię</span>
+      <kbd>F</kbd><span>ulubione</span>
+      <kbd>/</kbd><span>szukaj</span>
+      <kbd>Esc</kbd><span>odznacz</span>
+    </div>
+    <p class="hint" style="padding:12px 0 0">Projekty możesz też przeciągnąć na kategorię w panelu po lewej.</p>`;
+  return h;
+}
+function detailHtml(p) {
+  const img = p.files.png
+    ? `<img alt="" src="${esc(fileUrl(p, p.files.png.name, p.files.png.mtime))}">` : PH;
+  const where = p.cloud_project ? [p.cloud_project, p.cloud_folder].filter(Boolean).join(' / ') : 'zapisany Szybkim Zapisem';
+  let h = `<div class="pthumb">${img}</div><h2>${esc(p.name)}</h2><div class="path">☁ ${esc(where)}</div>`;
+  h += '<div class="actions">';
+  if (S.fusion) {
+    h += `<button class="btn primary" data-fusion="open" title="Otwiera kopię .f3d jako nowy dokument">Otwórz w Fusion</button>`;
+    h += `<button class="btn" data-fusion="insert" title="Wstawia jako komponent do aktywnego projektu">Wstaw do projektu</button>`;
+  }
+  h += `<button class="btn" data-act="folder">Pokaż folder</button>`;
+  h += `<button class="btn${p.favorite ? ' on' : ''}" data-act="fav">${p.favorite ? '★ Ulubiony' : '☆ Ulubiony'}</button></div>`;
+  h += `<h3>Kategoria</h3>${catPicker(p.category, false)}`;
+  h += `<h3>Etykiety</h3><div class="tagbox">` +
+    p.tags.map(t => `<span class="chip">#${esc(t)}<button data-rmtag="${esc(t)}" title="Usuń etykietę">×</button></span>`).join('') +
+    `<input id="tagInput" list="alltags" placeholder="${p.tags.length ? 'dodaj…' : 'np. druk3d, klient, do poprawy… (Enter)'}"></div>${tagList()}`;
+  h += `<h3>Notatka</h3><textarea id="note" data-f="${esc(p.folder)}" placeholder="Zapisuje się po wyjściu z pola">${esc(p.note)}</textarea>`;
+  const fl = p.files;
+  h += '<h3>Pliki</h3><div class="files">';
+  const dblFile = !S.fusion && S.apps ? (fl.step || fl.f3d || {}).name : null;
+  for (const kind of ['step', 'f3d']) {
+    const f = fl[kind];
+    if (!f) continue;
+    const dbl = f.name === dblFile ? dblApp(f.name) : undefined;   // undefined = nie ten plik
+    const cls = on => on ? 'btn primary' : 'btn';
+    const tip = on => on ? ' (dwuklik na miniaturze)' : '';
+    h += `<div class="frow"><div class="fn"><span>.${kind}</span><span>${fmtSize(f.size)}</span></div>`;
+    h += appsFor(f.name).map(({ app, i }) =>
+      `<button class="${cls(dbl === i)}" data-open="${esc(f.name)}" data-app="${i}" title="${esc(app.command)}${tip(dbl === i)}">${esc(app.name)}</button>`).join('');
+    h += `<button class="${cls(dbl === null)}" data-open="${esc(f.name)}" title="Program domyślny w systemie${tip(dbl === null)}">${S.apps ? 'Domyślny program' : 'Otwórz'}</button></div>`;
+  }
+  if (!fl.f3d) h += '<div class="frow" style="color:var(--danger)">brak pliku .f3d</div>';
+  if (!fl.step) h += '<div class="hint" style="padding:0">Bez .step (kopia bez opcji „eksportuj do STEP”).</div>';
+  h += '</div>';
+  h += '<h3>Informacje</h3><dl>';
+  h += `<dt>Wersja</dt><dd>${p.version ? 'v' + esc(p.version) : '—'}${p.versions ? ` · ${p.versions} lokalnych w versions/` : ''}</dd>`;
+  h += `<dt>Zapisano</dt><dd>${esc(fmtDate(p.last_saved))}${p.reason ? ' · ' + esc(REASONS[p.reason] || p.reason) : ''}</dd>`;
+  if (!fl.png) h += `<dt>Miniatura</dt><dd>brak</dd>`;
+  h += `<dt>Folder</dt><dd class="mono">${esc(p.folder)}</dd></dl>`;
+  return h;
+}
+// Programy z ustawień pasujące do rozszerzenia pliku (tylko aplikacja na Linuksa).
+function appsFor(fileName) {
+  if (!S.apps) return [];
+  const ext = (fileName.split('.').pop() || '').toLowerCase();
+  return S.apps.map((app, i) => ({ app, i }))
+    .filter(({ app }) => !app.exts || !app.exts.length || app.exts.includes(ext));
+}
+async function openFile(folder, file, appIdx) {
+  try {
+    const data = { folder, file };
+    if (appIdx != null && appIdx !== '') data.app = +appIdx;
+    await api('/api/open-file', data);
+    toast(`Otwieram ${file}…`);
+  } catch (e) { toast(e.message, true); }
+}
+// Podwójne kliknięcie: Fusion (jeśli połączony), inaczej .step w pierwszym pasującym programie.
+function openDefault(p) {
+  if (S.fusion) {
+    return api('/api/fusion', { action: 'open', folder: p.folder })
+      .then(() => toast('Otwieram w Fusion…'), e => toast(e.message, true));
+  }
+  const f = p.files.step || p.files.f3d;
+  if (!f) return toast('Ten projekt nie ma pliku do otwarcia.', true);
+  return openFile(p.folder, f.name, dblApp(f.name));
+}
+// Program na dwuklik dla danego pliku: indeks z ustawień albo null (program systemu).
+function dblApp(fileName) {
+  if (S.dblclick === -1) return null;
+  const list = appsFor(fileName);
+  if (S.dblclick != null && list.some(x => x.i === S.dblclick)) return S.dblclick;
+  return list.length ? list[0].i : null;
+}
+function bulkHtml() {
+  const ps = selFolders().map(f => S.by.get(f));
+  const n = ps.length;
+  const cats = new Set(ps.map(p => p.category));
+  const mixed = cats.size > 1;
+  const tags = new Map();
+  for (const p of ps) for (const t of p.tags) tags.set(t, (tags.get(t) || 0) + 1);
+  const favs = ps.filter(p => p.favorite).length;
+  let h = `<h2>Zaznaczono ${n} ${plural(n, 'projekt', 'projekty', 'projektów')}</h2>`;
+  h += `<div class="path">${mixed ? 'Różne kategorie' : (ps[0].category ? 'Kategoria: ' + esc(ps[0].category) : 'Bez kategorii')}</div>`;
+  h += `<h3>Przypisz kategorię wszystkim</h3>${catPicker(ps[0].category, mixed)}`;
+  h += `<h3>Etykiety</h3><div class="tagbox">` +
+    [...tags.entries()].sort((a, b) => collator.compare(a[0], b[0])).map(([t, k]) =>
+      `<span class="chip" title="${k} z ${n}">#${esc(t)}${k < n ? ` <small>${k}/${n}</small>` : ''}<button data-rmtag="${esc(t)}" title="Usuń z zaznaczonych">×</button></span>`).join('') +
+    `<input id="tagInput" list="alltags" placeholder="dodaj wszystkim… (Enter)"></div>${tagList()}`;
+  h += `<h3>Ulubione</h3><div class="actions" style="margin-top:0">` +
+    `<button class="btn" data-act="favall"${favs === n ? ' disabled' : ''}>★ Dodaj</button>` +
+    `<button class="btn" data-act="unfavall"${favs === 0 ? ' disabled' : ''}>☆ Usuń</button></div>`;
+  h += `<h3>Zaznaczenie</h3><div class="actions" style="margin-top:0"><button class="btn" data-act="clear">Odznacz wszystko</button></div>`;
+  h += '<div class="bars" style="margin-top:16px;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:6px">' +
+    ps.slice(0, 24).map(p => `<div class="pthumb" style="margin:0;aspect-ratio:1" title="${esc(p.name)}">${p.files.png ? `<img alt="" src="${esc(fileUrl(p, p.files.png.name, p.files.png.mtime))}">` : ''}</div>`).join('') +
+    (n > 24 ? `<div class="hint" style="align-self:center">+${n - 24}</div>` : '') + '</div>';
+  return h;
+}
+$('panel').addEventListener('click', async e => {
+  const t = e.target;
+  const folders = selFolders();
+  const sc = t.closest('[data-setcat]');
+  if (sc) return setCategory(folders, sc.dataset.setcat);
+  const rm = t.closest('[data-rmtag]');
+  if (rm) return update(folders, { remove_tags: [rm.dataset.rmtag] });
+  const op = t.closest('[data-open]');
+  if (op) return openFile(folders[0], op.dataset.open, op.dataset.app);
+  const fu = t.closest('[data-fusion]');
+  if (fu) {
+    try {
+      await api('/api/fusion', { action: fu.dataset.fusion, folder: folders[0] });
+      toast(fu.dataset.fusion === 'open' ? 'Otwieram w Fusion…' : 'Wstawiam do aktywnego projektu…');
+    } catch (err) { toast(err.message, true); }
+    return;
+  }
+  const act = t.closest('[data-act]')?.dataset.act;
+  if (act === 'folder') { try { await api('/api/open-folder', { folder: folders[0] }); } catch (err) { toast(err.message, true); } }
+  else if (act === 'fav') setFavorite(folders, !S.by.get(folders[0]).favorite);
+  else if (act === 'favall') setFavorite(folders, true);
+  else if (act === 'unfavall') setFavorite(folders, false);
+  else if (act === 'clear') { S.sel.clear(); renderSelection(); }
+  else if (act === 'newcat-assign') openCatDialog(null, folders);
+});
+$('panel').addEventListener('keydown', e => {
+  if (e.target.id === 'tagInput' && (e.key === 'Enter' || e.key === ',')) {
+    e.preventDefault();
+    const v = e.target.value.replace(/^#/, '').trim();
+    if (v) update(selFolders(), { add_tags: [v] });
+    e.target.value = '';
+  }
+  if (e.target.id === 'note' && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) e.target.blur();
+});
+$('panel').addEventListener('focusout', e => {
+  if (e.target.id !== 'note') return;
+  const f = e.target.dataset.f, p = S.by.get(f);
+  if (p && e.target.value !== p.note) update([f], { note: e.target.value }, 'Zapisano notatkę');
+});
+
+// ---------- okno kategorii ----------
+let catEdit = null;   // { old: nazwa|null, assign: [foldery]|null, color }
+function openCatDialog(name, assign) {
+  const cats = allCats();
+  const c = name ? cats.find(x => x.name === name) : null;
+  const used = new Set(cats.map(x => x.color));
+  catEdit = { old: name, assign: assign || null,
+    color: c ? c.color : (PALETTE.find(x => !used.has(x)) || PALETTE[cats.length % PALETTE.length]) };
+  $('catTitle').textContent = name ? 'Edytuj kategorię' : (assign ? 'Nowa kategoria dla zaznaczonych' : 'Nowa kategoria');
+  $('catName').value = name || '';
+  $('catDelete').hidden = !name;
+  renderSwatches();
+  $('catdlg').showModal();
+  $('catName').select();
+}
+function renderSwatches() {
+  $('swatches').innerHTML = PALETTE.map(c =>
+    `<button type="button" data-c="${c}" style="background:${c}" class="${c === catEdit.color ? 'active' : ''}" aria-label="${c}"></button>`).join('');
+}
+$('swatches').addEventListener('click', e => {
+  const b = e.target.closest('[data-c]'); if (!b) return;
+  catEdit.color = b.dataset.c; renderSwatches();
+});
+$('catCancel').addEventListener('click', () => $('catdlg').close());
+$('catform').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = $('catName').value.trim();
+  if (!name || name === 'unassigned') return;
+  const { old, assign, color } = catEdit;
+  const cats = allCats();
+  if (name !== old && cats.some(c => c.name === name) && old &&
+      !confirm(`Kategoria „${name}” już istnieje. Połączyć z nią „${old}”?`)) return;
+  $('catdlg').close();
+  try {
+    if (old && name !== old) {
+      const j = await api('/api/categories/rename', { old, new: name });
+      S.cats = j.categories;
+      if (S.f.view === 'cat:' + old) S.f.view = 'cat:' + name;
+      await load(true);
+      toast(`Zmieniono nazwę (${j.changed} ${plural(j.changed, 'projekt', 'projekty', 'projektów')})`);
+    }
+    const next = allCats().map(c => c.name === name ? { ...c, color } : c);
+    if (!next.some(c => c.name === name)) next.push({ name, color });
+    await saveCats(next);
+    if (assign) await setCategory(assign, name);
+    else if (!old) toast(`Dodano kategorię „${name}”`);
+  } catch (err) { toast(err.message, true); }
+});
+$('catDelete').addEventListener('click', async () => {
+  const old = catEdit.old;
+  const n = S.projects.filter(p => p.category === old).length;
+  if (!confirm(`Usunąć kategorię „${old}”?` + (n ? `\n${n} ${plural(n, 'projekt straci', 'projekty stracą', 'projektów straci')} kategorię (pliki zostają).` : ''))) return;
+  $('catdlg').close();
+  try {
+    await api('/api/categories/rename', { old, new: '' });
+    if (S.f.view === 'cat:' + old) S.f.view = 'all';
+    await load(true);
+    toast(`Usunięto kategorię „${old}”`);
+  } catch (err) { toast(err.message, true); }
+});
+
+// ---------- skróty i pasek górny ----------
+const typing = el => el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+const dialogOpen = () => $('catdlg').open || $('setdlg').open;
+document.addEventListener('keydown', e => {
+  if (dialogOpen()) return;
+  if (e.key === 'Escape') {
+    if (document.activeElement === $('q') && $('q').value) { $('q').value = ''; setFilter({ q: '' }); return; }
+    if (typing(document.activeElement)) { document.activeElement.blur(); return; }
+    if (S.sel.size) { S.sel.clear(); renderSelection(); }
+    return;
+  }
+  if (typing(document.activeElement) || e.altKey) return;
+  if (e.key === '/') { e.preventDefault(); $('q').focus(); $('q').select(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+    e.preventDefault(); S.sel = new Set(S.visible.map(p => p.folder)); renderSelection(); return;
+  }
+  if (e.ctrlKey || e.metaKey) return;
+  if (e.key.toLowerCase() === 'r') { load(); return; }
+  if (!S.sel.size) return;
+  if (/^[0-9]$/.test(e.key)) {
+    const i = +e.key;
+    if (i === 0) return setCategory(selFolders(), '');
+    const c = allCats()[i - 1];
+    if (c) setCategory(selFolders(), c.name);
+  } else if (e.key.toLowerCase() === 'f') {
+    const fs = selFolders();
+    setFavorite(fs, !fs.every(f => S.by.get(f).favorite));
+  }
+});
+let qTimer;
+$('q').addEventListener('input', () => {
+  clearTimeout(qTimer);
+  qTimer = setTimeout(() => setFilter({ q: $('q').value.trim() }), 120);
+});
+$('sort').addEventListener('change', () => setFilter({ sort: $('sort').value }));
+$('tile').addEventListener('input', () => {
+  S.tile = +$('tile').value;
+  document.documentElement.style.setProperty('--tile', S.tile + 'px');
+  store.set('tile', S.tile);
+});
+$('refresh').addEventListener('click', () => load());
+window.addEventListener('focus', () => {
+  // Kopia z chmury może w tle dopisywać projekty - odśwież po powrocie do karty.
+  if (Date.now() - S.lastLoad > 15000 && !typing(document.activeElement) && !dialogOpen()) load(true);
+});
+
+function renderHeader() {
+  $('vault').textContent = S.vault || 'nie wybrano folderu';
+  $('vault').title = S.vault;
+  const linux = S.app === 'linux';
+  $('pickVault').hidden = !linux;
+  $('openSettings').hidden = !linux;
+  const b = $('fusion');
+  b.hidden = linux;
+  b.textContent = S.fusion ? 'Połączono z Fusion' : 'Tryb bez Fusion';
+  b.className = 'badge' + (S.fusion ? ' on' : '');
+  b.title = S.fusion ? 'Działa „Otwórz w Fusion” i „Wstaw do projektu”'
+    : 'Galeria uruchomiona poza Fusion: przeglądanie i kategorie działają, otwieranie w Fusion nie';
+}
+
+// ---------- folder i ustawienia (aplikacja na Linuksa) ----------
+function resetView() {
+  S.sel.clear(); S.anchor = null;
+  cardCache.clear();
+  S.f.view = 'all'; S.f.cloud = ''; S.f.tag = '';
+}
+async function pickVault() {
+  try {
+    const r = await api('/api/pick-vault');
+    if (r.cancelled) return false;
+    resetView();
+    await load();
+    return true;
+  } catch (e) { toast(e.message, true); return false; }
+}
+async function setVault(path) {
+  try { await api('/api/set-vault', { path }); resetView(); await load(); return true; }
+  catch (e) { toast(e.message, true); return false; }
+}
+$('pickVault').addEventListener('click', pickVault);
+
+let draftApps = [];
+let draftDbl = null;   // indeks w draftApps, -1 = program systemu, null = pierwszy pasujący
+const dblRadio = (val, checked, title) =>
+  `<label class="dbl" title="${title}"><input type="radio" name="dbl" value="${val}"${checked ? ' checked' : ''}></label>`;
+function appRowsHtml() {
+  const autoDbl = draftDbl == null;
+  let h = '<div class="approw head"><span style="width:54px;text-align:center">Dwuklik</span><span>Nazwa</span><span>Polecenie</span><span>Rozszerzenia</span><span></span></div>';
+  h += draftApps.map((a, i) =>
+    `<div class="approw" data-i="${i}">` +
+    dblRadio(i, draftDbl === i || (autoDbl && i === 0), 'Otwieraj tym programem po dwukliku na miniaturze') +
+    `<input data-k="name" placeholder="Nazwa, np. FreeCAD" value="${esc(a.name)}">` +
+    `<input data-k="command" class="mono" placeholder="freecad %f" value="${esc(a.command)}">` +
+    `<input data-k="exts" placeholder="step, stp" value="${esc((a.exts || []).join(', '))}">` +
+    `<button type="button" data-rm="${i}" title="Usuń">×</button></div>`).join('');
+  h += `<div class="approw sys">${dblRadio(-1, draftDbl === -1 || (autoDbl && !draftApps.length), 'Po dwukliku otwieraj programem domyślnym systemu')}` +
+    `<span>Program domyślny systemu${draftApps.length ? '' : ' (brak programów na liście)'}</span></div>`;
+  return h;
+}
+$('appRows').addEventListener('change', e => {
+  if (e.target.name === 'dbl') draftDbl = +e.target.value;
+});
+function renderSettings() {
+  $('setVault').textContent = S.vault || 'nie wybrano';
+  const rec = S.recent.filter(r => r !== S.vault);
+  $('setRecent').innerHTML = rec.map(r => `<button type="button" data-path="${esc(r)}" title="${esc(r)}">${esc(r)}</button>`).join('');
+  $('appRows').innerHTML = appRowsHtml();
+}
+$('openSettings').addEventListener('click', () => {
+  draftApps = (S.apps || []).map(a => ({ ...a, exts: [...(a.exts || [])] }));
+  draftDbl = S.dblclick;
+  renderSettings();
+  $('setdlg').showModal();
+});
+$('appRows').addEventListener('input', e => {
+  const row = e.target.closest('.approw'); if (!row) return;
+  const a = draftApps[+row.dataset.i], k = e.target.dataset.k;
+  a[k] = k === 'exts' ? e.target.value.split(/[\s,;]+/).map(x => x.replace(/^\./, '').toLowerCase()).filter(Boolean) : e.target.value;
+});
+$('appRows').addEventListener('click', e => {
+  const b = e.target.closest('[data-rm]'); if (!b) return;
+  const i = +b.dataset.rm;
+  draftApps.splice(i, 1);
+  if (draftDbl === i) draftDbl = null; else if (draftDbl > i) draftDbl--;
+  $('appRows').innerHTML = appRowsHtml();
+});
+$('appAdd').addEventListener('click', () => {
+  draftApps.push({ name: '', command: '', exts: ['step', 'stp'] });
+  $('appRows').innerHTML = appRowsHtml();
+  const rows = $('appRows').querySelectorAll('.approw');
+  rows[rows.length - 1].querySelector('input').focus();
+});
+$('setPick').addEventListener('click', async () => { if (await pickVault()) renderSettings(); });
+$('setRecent').addEventListener('click', async e => {
+  const b = e.target.closest('[data-path]'); if (!b) return;
+  if (await setVault(b.dataset.path)) renderSettings();
+});
+$('setCancel').addEventListener('click', () => $('setdlg').close());
+$('setform').addEventListener('submit', async e => {
+  e.preventDefault();
+  try {
+    const keep = draftApps.map((a, i) => ({ a, i })).filter(({ a }) => a.name.trim() && a.command.trim());
+    let dbl = draftDbl;
+    if (dbl != null && dbl >= 0) { const k = keep.findIndex(x => x.i === dbl); dbl = k >= 0 ? k : null; }
+    const r = await api('/api/settings', { apps: keep.map(x => x.a), dblclick: dbl });
+    S.apps = r.apps;
+    S.dblclick = r.dblclick ?? null;
+    $('setdlg').close();
+    renderPanel();
+    toast('Zapisano ustawienia');
+  } catch (err) { toast(err.message, true); }
+});
+function renderAll() {
+  renderHeader(); renderSide(); renderGrid(); renderStatus(); renderPanel();
+}
+
+// ---------- start ----------
+Object.assign(S.f, store.get('filter', {}));
+if (!['name', 'date', 'cloud', 'category', 'size'].includes(S.f.sort)) S.f.sort = 'name';
+$('sort').value = S.f.sort;
+S.tile = store.get('tile', 190);
+$('tile').value = S.tile;
+document.documentElement.style.setProperty('--tile', S.tile + 'px');
+load(true);
+</script>
+</body>
+</html>
