@@ -33,7 +33,8 @@ npm run dev            # uruchomienie na próbę, bez pakowania
 npm run build          # AppImage
 ```
 
-Gotowy plik: `src-tauri/target/release/bundle/appimage/SyncLocal360 Galeria_0.1.0_amd64.AppImage`.
+Gotowy plik: `src-tauri/target/release/bundle/appimage/SyncLocal360 Galeria_1.0.0_amd64.AppImage`
+(w Releases na GitHubie ten sam plik nazywa się `SyncLocal360-Galeria-1.0.0-x86_64.AppImage`).
 Pierwsze budowanie trwa kilka minut (kompilacja zależności); kolejne są szybkie.
 
 Ikony aplikacji: `python3 tools/make_app_icon.py` (czysty Python, bez PIL).
@@ -41,9 +42,9 @@ Ikony aplikacji: `python3 tools/make_app_icon.py` (czysty Python, bez PIL).
 ## Uruchamianie
 
 ```
-chmod +x "SyncLocal360 Galeria_0.1.0_amd64.AppImage"
-./"SyncLocal360 Galeria_0.1.0_amd64.AppImage"                 # folder z ustawień
-./"SyncLocal360 Galeria_0.1.0_amd64.AppImage" ~/Nextcloud/NoCloud   # konkretny folder
+chmod +x "SyncLocal360-Galeria-1.0.0-x86_64.AppImage"
+./"SyncLocal360-Galeria-1.0.0-x86_64.AppImage"                 # folder z ustawień
+./"SyncLocal360-Galeria-1.0.0-x86_64.AppImage" ~/Nextcloud/NoCloud   # konkretny folder
 ```
 
 Ustawienia aplikacji: `~/.config/org.synclocal360.galeria/settings.json`

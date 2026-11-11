@@ -118,7 +118,7 @@ zostaną założone, a pliki o tej samej nazwie – pominięte.
 
 Samodzielna aplikacja – nie potrzebuje Fusion ani przeglądarki.
 
-1. Pobierz `SyncLocal360 Galeria_<wersja>_amd64.AppImage` z [Releases](../../releases).
+1. Pobierz `SyncLocal360-Galeria-<wersja>-x86_64.AppImage` z [Releases](../../releases).
 2. `chmod +x SyncLocal360*.AppImage` i uruchom (albo „Właściwości → Uprawnienia → Wykonywanie”).
 3. Kliknij **Folder…** i wskaż folder z kopiami.
 
