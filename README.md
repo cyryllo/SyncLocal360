@@ -6,6 +6,9 @@ SyncLocal360 pomaga wyjść z chmury Autodesk Fusion bez utraty dorobku. Pobiera
 projektów na Twój dysk (`.f3d` + `.step` + miniatury), pozwala ją uporządkować w galerii
 i otwierać modele w programach dostępnych na Linuksie – FreeCAD, SolidCraft i innych.
 
+Projekt jest oparty na dodatku **NoCloud2** autorstwa **Kamila Sokalskiego**
+([modelowanie3d.org](https://modelowanie3d.org)) – zob. [Autorzy i licencja](#autorzy-i-licencja).
+
 ![Galeria SyncLocal360 na Linuksie](docs/img/galeria.png)
 
 Projekt składa się z dwóch części:
@@ -222,7 +225,11 @@ Galeria w Fusion i aplikacja na Linuksa używają tej samej strony:
 
 ## Autorzy i licencja
 
-SyncLocal360 powstał na bazie dodatku **NoCloud2** autorstwa **Kamila Sokalskiego**
-([modelowanie3d.org](https://modelowanie3d.org)), udostępnionego na licencji otwartej
-z wymogiem uznania autorstwa. Z oryginału pochodzą m.in. Szybki Zapis, format folderu
-kopii i ustawienia. Szczegóły: [NOTICE.md](NOTICE.md).
+- **Cyryl Sochacki** – SyncLocal360 (kopia z chmury, przywracanie, galeria, aplikacja na Linuksa).
+- **Kamil Sokalski** – autor oryginalnego dodatku **NoCloud2**
+  ([modelowanie3d.org](https://modelowanie3d.org)), na którym SyncLocal360 jest oparty.
+
+NoCloud2 został udostępniony na licencji otwartej z wymogiem uznania autorstwa.
+Z oryginału pochodzą m.in. Szybki Zapis, ustawienia, autozapis, format folderu kopii
+(`config.json`) i ikony Szybkiego Zapisu i Ustawień. Dokładny spis: [NOTICE.md](NOTICE.md).
+Korzystając z kodu SyncLocal360, zachowaj informację o obu autorach.

@@ -11,6 +11,9 @@ projektów zrobionych dodatkiem SyncLocal360. Nie potrzebuje Fusion.
   domyślnym systemu; podwójne kliknięcie miniatury otwiera `.step` w pierwszym pasującym programie.
 
 Interfejs to ten sam plik co w dodatku: `../resources/gallery/index.html`.
+
+Autor: Cyryl Sochacki. Projekt SyncLocal360 jest oparty na dodatku NoCloud2 autorstwa
+Kamila Sokalskiego (https://modelowanie3d.org) – zob. [NOTICE.md](../NOTICE.md).
 Kod aplikacji: `src-tauri/src/lib.rs` (Tauri 2, Rust).
 
 ## Budowanie

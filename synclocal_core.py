@@ -11,7 +11,6 @@ resolve_unique_folder itd.) pochodzą z oryginalnego nocloud_core.py.
 import adsk.core, adsk.fusion, traceback
 import os, json, shutil, threading, datetime, uuid, tempfile
 
-ADDIN_NAME = "SyncLocal360"
 ADDIN_PATH = os.path.dirname(os.path.realpath(__file__))
 SETTINGS_PATH = os.path.join(ADDIN_PATH, "synclocal_settings.json")
 
@@ -243,45 +242,8 @@ def save_current_document_to_vault(reason="manual"):
 
 
 # ---------------------------------------------------------------------------
-# ODCZYT FOLDERU (przyda się np. do przyszłej galerii)
+# OTWIERANIE KOPII W FUSION (używane przez galerię)
 # ---------------------------------------------------------------------------
-def list_versions(target_dir, safe_name):
-    """Lista {"version": n, "path": ...} z podfolderu versions/, najnowsze pierwsze."""
-    versions_dir = os.path.join(target_dir, "versions")
-    result = []
-    if os.path.isdir(versions_dir):
-        prefix = f"{safe_name}_v"
-        for fname in os.listdir(versions_dir):
-            if fname.startswith(prefix) and fname.endswith(".f3d"):
-                try:
-                    version_num = int(fname[len(prefix):-4])
-                except ValueError:
-                    continue
-                result.append({"version": version_num, "path": os.path.join(versions_dir, fname)})
-    result.sort(key=lambda v: v["version"], reverse=True)
-    return result
-
-
-def scan_vault():
-    """Wszystkie zapisane projekty: zawartość config.json + lista wersji."""
-    vault_dir = get_vault_dir()
-    items = []
-    for entry in sorted(os.listdir(vault_dir)):
-        folder_path = os.path.join(vault_dir, entry)
-        config_path = os.path.join(folder_path, "config.json")
-        if not os.path.isdir(folder_path) or not os.path.isfile(config_path):
-            continue
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                meta = json.load(f)
-        except Exception:
-            continue
-        item = {"folder": entry, **meta}
-        item["versions"] = list_versions(folder_path, entry)
-        items.append(item)
-    return items
-
-
 def import_from_vault(folder_name):
     """Wstawia zapisany projekt jako komponent do aktywnego projektu."""
     try:

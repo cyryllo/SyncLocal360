@@ -1,4 +1,9 @@
 <!doctype html>
+<!--
+  SyncLocal360 – galeria lokalnych kopii projektów (wspólna dla dodatku Fusion i aplikacji na Linuksa).
+  Autor: Cyryl Sochacki. Projekt oparty na dodatku NoCloud2 autorstwa Kamila Sokalskiego
+  (https://modelowanie3d.org), wydanym na licencji otwartej z wymogiem uznania autorstwa.
+-->
 <html lang="pl">
 <head>
 <meta charset="utf-8">
@@ -283,6 +288,8 @@ dd { margin: 0; word-break: break-word; }
 .bar i span { display: block; height: 100%; border-radius: 3px; }
 .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; font-size: 12.5px; color: var(--muted); align-items: center; }
 .keys kbd { justify-self: start; }
+.credit { margin-top: 28px; padding: 12px 0 0 !important; border-top: 1px solid var(--border); line-height: 1.5; }
+.credit a { color: inherit; }
 
 /* ---------- okno kategorii, powiadomienia ---------- */
 dialog {
@@ -862,7 +869,9 @@ function summaryHtml() {
       <kbd>/</kbd><span>szukaj</span>
       <kbd>Esc</kbd><span>odznacz</span>
     </div>
-    <p class="hint" style="padding:12px 0 0">Projekty możesz też przeciągnąć na kategorię w panelu po lewej.</p>`;
+    <p class="hint" style="padding:12px 0 0">Projekty możesz też przeciągnąć na kategorię w panelu po lewej.</p>
+    <p class="hint credit">SyncLocal360 · Cyryl Sochacki<br>na bazie dodatku NoCloud2 autorstwa Kamila Sokalskiego
+      (<a href="https://modelowanie3d.org" target="_blank" rel="noopener">modelowanie3d.org</a>)</p>`;
   return h;
 }
 function detailHtml(p) {

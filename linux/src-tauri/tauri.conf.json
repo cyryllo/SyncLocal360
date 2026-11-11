@@ -25,7 +25,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["appimage"],
+    "targets": [
+      "appimage"
+    ],
     "category": "GraphicsAndDesign",
     "shortDescription": "Galeria lokalnych kopii projektów Fusion",
     "longDescription": "Przeglądanie i porządkowanie lokalnych kopii projektów z dodatku SyncLocal360: kategorie, etykiety, notatki, otwieranie plików STEP w wybranych programach.",
@@ -39,6 +41,8 @@
       "appimage": {
         "bundleMediaFramework": false
       }
-    }
+    },
+    "copyright": "Cyryl Sochacki; na bazie NoCloud2 – Kamil Sokalski (modelowanie3d.org)",
+    "publisher": "Cyryl Sochacki"
   }
 }

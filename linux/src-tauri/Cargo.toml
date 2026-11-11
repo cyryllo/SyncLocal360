@@ -1,7 +1,9 @@
 [package]
 name = "synclocal360-galeria"
 version = "0.1.0"
-description = "SyncLocal360 - galeria lokalnych kopii projektów"
+description = "SyncLocal360 - galeria lokalnych kopii projektów (na bazie NoCloud2 autorstwa Kamila Sokalskiego)"
+authors = ["Cyryl Sochacki", "Kamil Sokalski (NoCloud2, modelowanie3d.org)"]
+repository = "https://github.com/cyryllo/SyncLocal360"
 edition = "2021"
 
 [lib]

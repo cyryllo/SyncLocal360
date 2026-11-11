@@ -2,6 +2,10 @@
 """
 SyncLocal360 - galeria lokalnych kopii w przeglądarce.
 
+Część dodatku SyncLocal360 (Cyryl Sochacki), opartego na dodatku NoCloud2
+autorstwa Kamila Sokalskiego (https://modelowanie3d.org), wydanym na licencji
+otwartej z wymogiem uznania autorstwa.
+
 Mały serwer HTTP (tylko biblioteka standardowa) dostępny wyłącznie
 z tego komputera (127.0.0.1). Pokazuje projekty z folderu kopii
 i pozwala przypisywać im kategorie, etykiety, notatki i gwiazdki.
