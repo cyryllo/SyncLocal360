@@ -27,6 +27,7 @@ Projekt składa się z dwóch części:
 
 - [Dla kogo](#dla-kogo)
 - [Przejście z Fusion na Linuksa krok po kroku](#przejście-z-fusion-na-linuksa-krok-po-kroku)
+- [Gdzie trzymać kopie – Windows i Linux razem](#gdzie-trzymać-kopie--windows-i-linux-razem)
 - [Dodatek do Fusion](#dodatek-do-fusion)
 - [Galeria na Linuksie (AppImage)](#galeria-na-linuksie-appimage)
 - [Układ folderu kopii](#układ-folderu-kopii)
@@ -46,8 +47,9 @@ Projekt składa się z dwóch części:
 
 1. **Na komputerze z Fusion** (Windows / macOS) zainstaluj dodatek SyncLocal360
    ([instrukcja niżej](#instalacja)).
-2. W **Ustawieniach** dodatku wskaż folder na kopie – najlepiej taki, który synchronizuje się
-   z Linuksem (Nextcloud, Syncthing, dysk sieciowy) albo który przeniesiesz na dysku USB.
+2. W **Ustawieniach** dodatku wskaż folder na kopie. Najlepiej taki, który widać z obu
+   systemów: **udostępniony katalog na NAS-ie** albo folder **Nextcloud** – zob.
+   [Gdzie trzymać kopie](#gdzie-trzymać-kopie--windows-i-linux-razem).
 3. Kliknij **Kopia z chmury**, zaznacz projekty i włącz **„Dodatkowo eksportuj do STEP”**.
    To ważne: na Linuksie otworzysz `.step`, a nie `.f3d`.
 4. Poczekaj. Kopia idzie plik po pliku, a postęp widać w okienku.
@@ -59,6 +61,32 @@ Projekt składa się z dwóch części:
    wyszukiwanie, kategorie, etykiety, notatki i otwieranie `.step` w wybranym programie.
 
    ![Model ze STEP otwarty z galerii w SolidCraft](docs/img/galeria-solidcraft.png)
+
+## Gdzie trzymać kopie – Windows i Linux razem
+
+Najwygodniej trzymać folder kopii w miejscu, do którego mają dostęp **oba systemy**: Windows
+(lub macOS) z Fusion zapisuje tam kopie, a Linux od razu je widzi w galerii. Kategorie, etykiety
+i notatki też są w tym folderze, więc porządek zrobiony na jednym systemie widać na drugim.
+
+| Sposób | Jak | Zalety | Na co uważać |
+|---|---|---|---|
+| **Udostępniony katalog na NAS-ie** (SMB) | Windows: mapuj dysk sieciowy (np. `Z:\SyncLocal360`). Linux: zamontuj ten sam udział (Dolphin/Nautilus → „Sieć”, albo wpis w `/etc/fstab` z `cifs`) | jedna kopia plików, bez czekania na synchronizację, oszczędza miejsce na laptopach | kopia z chmury zapisuje przez sieć (wolniej niż na dysk lokalny); NAS musi być dostępny przy pracy |
+| **Nextcloud** (lub inna chmura z klientem na oba systemy) | ten sam folder synchronizowany na Windowsie i Linuksie, np. `Nextcloud/SyncLocal360` | pliki są lokalnie na obu komputerach – działa też bez sieci | przed otwarciem na Linuksie poczekaj, aż klient skończy synchronizację; przy dużej bazie (kilka–kilkanaście GB) pierwsza synchronizacja trwa długo |
+| **Syncthing** | folder współdzielony między komputerami bez serwera | bez chmury i bez NAS-a | oba komputery muszą być włączone jednocześnie, żeby się zsynchronizować |
+| Dysk USB | skopiuj folder po skończonej kopii | najprostsze przy jednorazowej migracji | brak bieżącej synchronizacji – kolejne kopie trzeba przenosić ręcznie |
+
+Wskazówki:
+
+- **Nextcloud:** jeśli po kopii w galerii na Linuksie brakuje jakiejś miniatury lub pliku,
+  sprawdź w kliencie Nextcloud na Windowsie, czy wszystko zostało wysłane (lista
+  „Nie zsynchronizowano” / aktywność). Zdarza się, że klient pominie plik, który Fusion
+  akurat trzymał otwarty – pomaga „Synchronizuj teraz” albo odświeżenie pliku.
+- **Nie edytuj kategorii jednocześnie na obu systemach** w tym samym projekcie – przy
+  synchronizacji (Nextcloud, Syncthing) może powstać plik konfliktu `config.json`.
+  Na NAS-ie tego problemu nie ma.
+- Ścieżki mogą się różnić (np. `E:\Nextcloud\SyncLocal360` na Windowsie i
+  `~/Nextcloud/SyncLocal360` na Linuksie) – to nie przeszkadza, każdy system wskazuje folder
+  u siebie.
 
 ## Dodatek do Fusion
 

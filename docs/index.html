@@ -289,19 +289,20 @@ footer small { color: var(--faint); }
 
       <div class="step">
         <div>
-          <h3>Przenieś folder na Linuksa</h3>
-          <p>Folder z kopiami to zwykłe pliki. Ustaw go w folderze synchronizowanym z Linuksem
-            albo po prostu skopiuj na dysk.</p>
+          <h3>Trzymaj kopie tam, gdzie widzą je oba systemy</h3>
+          <p>Folder z kopiami to zwykłe pliki. Najlepiej ustaw go w miejscu dostępnym
+            z Windowsa i z Linuksa – wtedy Fusion zapisuje kopie, a galeria na Linuksie od razu je widzi.</p>
           <ul>
-            <li>Nextcloud, Syncthing, dysk sieciowy, pendrive,</li>
-            <li>kategorie i notatki podróżują razem z plikami.</li>
+            <li><b>udostępniony katalog na NAS-ie</b> – zmapowany na Windowsie, zamontowany na Linuksie,</li>
+            <li><b>Nextcloud</b> (albo Syncthing) – ten sam folder synchronizowany na obu komputerach,</li>
+            <li>kategorie, etykiety i notatki są w tym samym folderze, więc widać je w obu systemach.</li>
           </ul>
         </div>
         <div class="media">
           <div class="sync-art" aria-hidden="true">
             <div class="box">Fusion<small>Windows / macOS</small></div>
             <span class="arrow">→</span>
-            <div class="box">Folder kopii<small>.f3d · .step · .png</small></div>
+            <div class="box">NAS / Nextcloud<small>.f3d · .step · .png</small></div>
             <span class="arrow">→</span>
             <div class="box">Galeria<small>Linux</small></div>
           </div>
@@ -473,6 +474,14 @@ footer small { color: var(--faint); }
       <summary>Czy mogę wrócić do Fusion?</summary>
       <p>Tak. Plik <code>.f3d</code> zawiera cały projekt z historią. „Przywróć do chmury” wgra kopie
         z powrotem – także na inne konto.</p>
+    </details>
+    <details>
+      <summary>Gdzie najlepiej trzymać folder z kopiami?</summary>
+      <p>W miejscu, do którego mają dostęp oba systemy: w udostępnionym katalogu na NAS-ie
+        (na Windowsie jako dysk sieciowy, na Linuksie zamontowany udział SMB) albo w folderze
+        Nextcloud synchronizowanym na obu komputerach. Przy Nextcloud przed otwarciem galerii
+        na Linuksie poczekaj, aż synchronizacja się skończy, i nie zmieniaj kategorii tego samego
+        projektu jednocześnie na dwóch komputerach.</p>
     </details>
     <details>
       <summary>Gdzie zapisują się kategorie i notatki?</summary>
