@@ -3105,7 +3105,7 @@ dependencies = [
 
 [[package]]
 name = "synclocal360-galeria"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "chrono",
  "percent-encoding",

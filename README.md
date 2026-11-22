@@ -166,8 +166,12 @@ Co potrafi:
   po lewej (widać go po najechaniu myszą i przy wybranej kategorii) albo przyciskiem
   **+ Podkategoria w …** w panelu projektu. W oknie edycji możesz przenieść kategorię pod inną. Kliknięcie
   kategorii pokazuje też projekty z jej podkategorii.
-- **Porządkowanie wielu projektów naraz**: Ctrl/Shift+klik, potem klawisz **1–9**
+- **Porządkowanie wielu projektów naraz**: Ctrl/Shift+klik, potem skrót kategorii
   przypisuje kategorię, **0** ją usuwa – albo przeciągnij projekty na kategorię.
+  Skrót widać przy kategorii po lewej. Domyślnie kategorie dostają po kolei cyfry 1–9,
+  a w edycji kategorii (✎) możesz wybrać inną cyfrę, literę (oprócz F i R) albo brak skrótu.
+- **Drzewo projektów i folderów z chmury Fusion** po lewej (Prywatne › Fablab › Drukarki 3D…):
+  kliknięcie pokazuje projekty z folderu razem z podfolderami.
 
   ![Zaznaczanie wielu projektów](docs/img/zaznaczanie.png)
 

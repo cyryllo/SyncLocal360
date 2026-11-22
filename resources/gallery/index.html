@@ -268,6 +268,12 @@ aside.panel {
 .catpick button.add { color: var(--muted); border-style: dashed; }
 .catpick.sub { margin-top: 6px; padding: 6px 0 0 10px; border-left: 2px solid var(--border); }
 .catpick.sub .in { flex: 1 1 100%; font-size: 11.5px; color: var(--faint); }
+.row .hk {
+  font: 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--faint);
+  padding: 2px 4px; border: 1px solid var(--border); border-radius: 3px; text-transform: uppercase;
+}
+.row:hover .hk { display: none; }
+.catpick .key { text-transform: uppercase; }
 .catpick .key {
   font: 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--faint);
   padding: 2px 4px; border: 1px solid var(--border); border-radius: 3px; margin-left: 2px;
@@ -427,6 +433,8 @@ dialog code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospac
     <input type="text" id="catName" maxlength="60" autocomplete="off" required>
     <label for="catParent">Kategoria nadrzędna</label>
     <select id="catParent"></select>
+    <label for="catKey">Skrót klawiszowy (przypisuje kategorię zaznaczonym projektom)</label>
+    <select id="catKey"></select>
     <label>Kolor</label>
     <div class="swatches" id="swatches"></div>
     <div class="dlgbtns">
@@ -478,7 +486,7 @@ const catLabel = n => String(n).split(SEP).join(' › ');
 const S = {
   projects: [], by: new Map(), cats: [], fusion: false, vault: '',
   app: '', apps: null, recent: [], thumbBase: '/files/', needVault: false, dblclick: null,
-  sel: new Set(), anchor: null, visible: [], lastLoad: 0, collapsed: new Set(),
+  sel: new Set(), anchor: null, visible: [], lastLoad: 0, collapsed: new Set(), cloudOpen: new Set(),
   f: { view: 'all', cloud: '', tag: '', q: '', sort: 'name' },
   tile: 190,
 };
@@ -569,17 +577,20 @@ function mergeProjects(list) {
 }
 // Kategorie: zdefiniowane w synclocal_gallery.json + te, które są tylko w config.json,
 // ułożone w drzewo (podkategoria zaraz po swojej nadrzędnej). Brakujące nadrzędne są dopisywane.
-// Pola: name (pełna ścieżka), leaf, depth, kids, color (wyliczony), own (zapisany, może być '').
+// Pola: name (pełna ścieżka), leaf, depth, kids, color (wyliczony), own (zapisany, może być ''),
+// keyOwn (zapisany skrót: '' = automatycznie, '-' = brak, znak) i hot (skrót, który działa).
 let catMemo = null;
 function setCats(list) { S.cats = list || []; catMemo = null; }
 function allCats() {
   if (catMemo) return catMemo;
-  const own = new Map();
-  const add = (raw, color) => {
+  const own = new Map(), keyOwn = new Map();
+  const add = (raw, color, key) => {
     const n = cleanCat(raw);
-    if (n && n !== 'unassigned' && !own.get(n)) own.set(n, color || '');
+    if (!n || n === 'unassigned') return;
+    if (!own.get(n)) own.set(n, color || '');
+    if (key && !keyOwn.get(n)) keyOwn.set(n, String(key).toLowerCase());
   };
-  S.cats.forEach(c => add(c.name, c.color));
+  S.cats.forEach(c => add(c.name, c.color, c.key));
   [...new Set(S.projects.map(p => p.category).filter(Boolean))].sort(collator.compare).forEach(n => add(n, ''));
   for (const n of [...own.keys()]) {          // brakujące nadrzędne na końcu
     const parts = n.split(SEP);
@@ -603,15 +614,27 @@ function allCats() {
     for (const n of kids.get(parent) || []) {
       const color = own.get(n) || inherited || freeColor();
       if (!parent) top++;
-      out.push({ name: n, leaf: leafOf(n), depth, kids: kids.has(n), color, own: own.get(n) });
+      out.push({ name: n, leaf: leafOf(n), depth, kids: kids.has(n), color, own: own.get(n), keyOwn: keyOwn.get(n) || '' });
       walk(n, color, depth + 1);
     }
   };
   walk('', '', 0);
+  // Skróty: najpierw ustawione ręcznie, potem kolejne wolne cyfry 1–9 dla kategorii „automatycznie”.
+  const taken = new Set();
+  for (const c of out) {
+    if (c.keyOwn && c.keyOwn !== '-' && !taken.has(c.keyOwn)) { c.hot = c.keyOwn; taken.add(c.hot); }
+  }
+  let d = 1;
+  for (const c of out) {
+    if (c.hot || c.keyOwn) { c.hot = c.hot || ''; continue; }
+    while (d <= 9 && taken.has(String(d))) d++;
+    c.hot = d <= 9 ? String(d++) : '';
+  }
   return (catMemo = out);
 }
+const HOTKEYS = '123456789abcdeghijklmnopqstuvwxyz';   // bez F i R (ulubione, odświeżanie); 0 = brak kategorii
 // Do zapisu: kategoria główna zapamiętuje kolor, podkategoria bez własnego dziedziczy go.
-const catsForSave = list => list.map(c => ({ name: c.name, color: c.own || (c.depth ? '' : c.color) }));
+const catsForSave = list => list.map(c => ({ name: c.name, color: c.own || (c.depth ? '' : c.color), key: c.keyOwn || '' }));
 const catColor = name => (allCats().find(c => c.name === name) || {}).color || 'var(--faint)';
 function allTags() {
   const m = new Map();
@@ -667,7 +690,7 @@ function computeVisible() {
     if (f.view === 'none' && p.category) return false;
     if (f.view === 'fav' && !p.favorite) return false;
     if (f.view.startsWith('cat:') && !inCat(p.category, f.view.slice(4))) return false;
-    if (f.cloud && (p.cloud_project || NONE_CLOUD) !== f.cloud) return false;
+    if (f.cloud && !inCloud(cloudKey(p), f.cloud)) return false;
     if (f.tag && !p.tags.includes(f.tag)) return false;
     for (const w of words) if (!p._s.includes(w)) return false;
     return true;
@@ -695,12 +718,63 @@ function setFilter(patch) {
   document.querySelector('main').scrollTop = 0;
 }
 
+// ---------- foldery w chmurze ----------
+// Klucz folderu: projekt w chmurze i kolejne foldery połączone znakiem CS,
+// np. "Prywatne␟Fablab␟Drukarki 3D". Filtr pokazuje folder razem z podfolderami.
+const CS = '\u001f';
+const cloudKey = p => [p.cloud_project || NONE_CLOUD, ...String(p.cloud_folder || '').split('/').filter(Boolean)].join(CS);
+const inCloud = (key, root) => key === root || key.startsWith(root + CS);
+const cloudLabel = k => k.split(CS).map(x => x === NONE_CLOUD ? 'Szybki Zapis' : x).join(' › ');
+function cloudTreeHtml(row) {
+  const cnt = new Map();
+  for (const p of S.projects) {
+    const parts = cloudKey(p).split(CS);
+    for (let i = 1; i <= parts.length; i++) {
+      const k = parts.slice(0, i).join(CS);
+      cnt.set(k, (cnt.get(k) || 0) + 1);
+    }
+  }
+  if (!cnt.size) return '';
+  const kids = new Map();
+  for (const k of cnt.keys()) {
+    const i = k.lastIndexOf(CS), parent = i < 0 ? '' : k.slice(0, i);
+    if (!kids.has(parent)) kids.set(parent, []);
+    kids.get(parent).push(k);
+  }
+  const leaf = k => k.slice(k.lastIndexOf(CS) + 1);
+  for (const list of kids.values()) list.sort((a, b) => collator.compare(leaf(a), leaf(b)));
+  let h = '<div class="sec">Projekt i folder w chmurze</div>';
+  const walk = (parent, depth) => {
+    for (const k of kids.get(parent) || []) {
+      const has = kids.has(k), open = S.cloudOpen.has(k);
+      const name = leaf(k);
+      const tw = has
+        ? `<span class="tw${open ? ' open' : ''}" data-cloudtoggle="${esc(k)}" title="${open ? 'Zwiń' : 'Rozwiń foldery'}">▶</span>`
+        : '<span class="tw"></span>';
+      const icon = depth ? ICONS.folder : ICONS.cloud;
+      h += row(`data-cloud="${esc(k)}" title="${esc(cloudLabel(k))}"${depth ? ` style="padding-left:${8 + depth * 16}px"` : ''}`,
+        `${tw}${icon}<span class="lbl">${name === NONE_CLOUD ? '<i>Szybki Zapis</i>' : esc(name)}</span><span class="cnt">${cnt.get(k)}</span>`,
+        S.f.cloud === k);
+      if (has && open) walk(k, depth + 1);
+    }
+  };
+  walk('', 0);
+  return h;
+}
+// Po wybraniu folderu jego nadrzędne foldery są rozwinięte.
+function openCloudPath(k) {
+  const parts = k.split(CS);
+  for (let i = 1; i < parts.length; i++) S.cloudOpen.add(parts.slice(0, i).join(CS));
+  store.set('cloudOpen', [...S.cloudOpen]);
+}
+
 // ---------- pasek boczny ----------
 const ICONS = {
   all: '<svg class="ico" viewBox="0 0 16 16" fill="currentColor"><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.2"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1.2"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1.2"/><rect x="9" y="9" width="5.5" height="5.5" rx="1.2"/></svg>',
   fav: '<svg class="ico" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.3l2 4.1 4.5.6-3.3 3.1.8 4.5L8 11.5l-4 2.1.8-4.5L1.5 6l4.5-.6z"/></svg>',
   none: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.2 2"><circle cx="8" cy="8" r="5.5"/></svg>',
   cloud: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4.5 12.5h7.2a3 3 0 0 0 .3-6 4 4 0 0 0-7.7.9 2.6 2.6 0 0 0 .2 5.1z"/></svg>',
+  folder: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.8 4.2v7.6c0 .6.4 1 1 1h10.4c.6 0 1-.4 1-1V6c0-.6-.4-1-1-1H8L6.6 3.2H2.8c-.6 0-1 .4-1 1z"/></svg>',
   tag: '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2.5v5l6.5 6.5 5-5L7 2.5z"/><circle cx="5" cy="5.5" r="1" fill="currentColor"/></svg>',
 };
 function renderSide() {
@@ -728,20 +802,14 @@ function renderSide() {
       : '<span class="tw"></span>';
     h += row(`data-view="cat:${esc(c.name)}" title="${esc(catLabel(c.name))}"${c.depth ? ` style="padding-left:${8 + c.depth * 16}px"` : ''}`,
       `${tw}<span class="dot" style="background:${esc(c.color)}"></span><span class="lbl">${esc(c.leaf)}</span>` +
+      (c.hot ? `<span class="hk" title="Skrót klawiszowy">${esc(c.hot)}</span>` : '') +
       `<span class="cnt">${count(p => inCat(p.category, c.name))}</span>` +
       `<span class="edit" data-subcat="${esc(c.name)}" title="Nowa podkategoria">+</span>` +
       `<span class="edit" data-editcat="${esc(c.name)}" title="Edytuj kategorię">✎</span>`,
       f.view === 'cat:' + c.name, 'cat:' + c.name);
   }
 
-  const clouds = new Map();
-  for (const p of P) { const k = p.cloud_project || NONE_CLOUD; clouds.set(k, (clouds.get(k) || 0) + 1); }
-  if (clouds.size) {
-    h += '<div class="sec">Projekt w chmurze</div>';
-    for (const [k, n] of [...clouds.entries()].sort((a, b) => collator.compare(a[0], b[0]))) {
-      h += row(`data-cloud="${esc(k)}"`, `${ICONS.cloud}<span class="lbl">${k === NONE_CLOUD ? '<i>Szybki Zapis</i>' : esc(k)}</span><span class="cnt">${n}</span>`, f.cloud === k);
-    }
-  }
+  h += cloudTreeHtml(row);
   const tags = allTags();
   if (tags.length) {
     h += '<div class="sec">Etykiety</div>';
@@ -754,6 +822,14 @@ $('side').addEventListener('click', e => {
   if (ed) { e.stopPropagation(); return openCatDialog(ed.dataset.editcat); }
   const sub = e.target.closest('[data-subcat]');
   if (sub) { e.stopPropagation(); return openCatDialog(null, null, sub.dataset.subcat); }
+  const ct = e.target.closest('[data-cloudtoggle]');
+  if (ct) {
+    e.stopPropagation();
+    const k = ct.dataset.cloudtoggle;
+    S.cloudOpen.has(k) ? S.cloudOpen.delete(k) : S.cloudOpen.add(k);
+    store.set('cloudOpen', [...S.cloudOpen]);
+    return renderSide();
+  }
   const tg = e.target.closest('[data-toggle]');
   if (tg) {
     e.stopPropagation();
@@ -844,7 +920,7 @@ function renderStatus() {
   if (f.view === 'fav') h += chip('Ulubione', 'view');
   if (f.view === 'none') h += chip('Bez kategorii', 'view');
   if (f.view.startsWith('cat:')) h += chip(`<span class="dot" style="background:${esc(catColor(f.view.slice(4)))}"></span>${esc(catLabel(f.view.slice(4)))}`, 'view');
-  if (f.cloud) h += chip(f.cloud === NONE_CLOUD ? 'Szybki Zapis' : '☁ ' + esc(f.cloud), 'cloud');
+  if (f.cloud) h += chip((f.cloud === NONE_CLOUD ? '' : '☁ ') + esc(cloudLabel(f.cloud)), 'cloud');
   if (f.tag) h += chip('#' + esc(f.tag), 'tag');
   if (f.q) h += chip('„' + esc(f.q) + '”', 'q');
   $('status').innerHTML = h;
@@ -907,15 +983,13 @@ function renderSelection() {
 // Kategorie główne, a pod nimi podkategorie kolejnych poziomów wybranej kategorii.
 function catPicker(current, mixed) {
   const cats = allCats();
-  const key = new Map(cats.map((c, i) => [c.name, i]));
   const active = mixed ? '' : current;
   const pill = c => {
-    const i = key.get(c.name);
     const on = active === c.name, path = !on && inCat(active, c.name);
     return `<button data-setcat="${esc(c.name)}" class="${on || path ? 'active' : ''}"${path ? ' style="font-weight:500"' : ''}` +
-      ` title="${esc(catLabel(c.name))}${i < 9 ? ` · skrót: ${i + 1}` : ''}">` +
+      ` title="${esc(catLabel(c.name))}${c.hot ? ` · skrót: ${esc(c.hot.toUpperCase())}` : ''}">` +
       `<span class="dot" style="background:${esc(c.color)}"></span>${esc(c.leaf)}` +
-      (i < 9 ? ` <span class="key">${i + 1}</span>` : '') + `</button>`;
+      (c.hot ? ` <span class="key">${esc(c.hot)}</span>` : '') + `</button>`;
   };
   let h = '<div class="catpick">';
   h += `<button data-setcat="" class="${!mixed && !current ? 'active' : ''}" title="Skrót: 0">Brak <span class="key">0</span></button>`;
@@ -965,7 +1039,7 @@ function summaryHtml() {
       <kbd>Ctrl+klik</kbd><span>zaznacz kilka</span>
       <kbd>Shift+klik</kbd><span>zaznacz zakres</span>
       <kbd>Ctrl+A</kbd><span>zaznacz widoczne</span>
-      <kbd>1–9</kbd><span>przypisz kategorię zaznaczonym (kolejność z listy po lewej)</span>
+      <kbd>1–9</kbd><span>przypisz kategorię zaznaczonym (skrót widać przy kategorii; zmienisz go w edycji kategorii ✎, można też użyć liter)</span>
       <kbd>0</kbd><span>usuń kategorię</span>
       <kbd>F</kbd><span>ulubione</span>
       <kbd>/</kbd><span>szukaj</span>
@@ -1148,6 +1222,15 @@ function openCatDialog(name, assign, parent) {
     cats.filter(x => !(name && inCat(x.name, name))).map(x =>
       `<option value="${esc(x.name)}">${'\u00a0\u00a0\u00a0'.repeat(x.depth)}${esc(x.leaf)}</option>`).join('');
   $('catParent').value = parent;
+  // Skrót: automatycznie / brak / cyfra / litera; zajęte przez inne kategorie są podpisane.
+  const auto = c && !c.keyOwn && c.hot ? ` (teraz ${c.hot.toUpperCase()})` : '';
+  const owner = new Map(cats.filter(x => x.hot && x.name !== name).map(x => [x.hot, x]));
+  $('catKey').innerHTML = `<option value="">Automatycznie – kolejna wolna cyfra${auto}</option><option value="-">Brak</option>` +
+    [...HOTKEYS].map(k => {
+      const o = owner.get(k);
+      return `<option value="${k}">${k.toUpperCase()}${o ? ` – teraz: ${esc(catLabel(o.name))}${o.keyOwn ? '' : ' (auto)'}` : ''}</option>`;
+    }).join('');
+  $('catKey').value = c ? c.keyOwn : '';
   $('catDelete').hidden = !name;
   renderSwatches();
   $('catdlg').showModal();
@@ -1190,6 +1273,7 @@ $('catform').addEventListener('submit', async e => {
   const name = cleanCat((parent ? parent + SEP : '') + $('catName').value);
   if (!name || leafOf(name) === 'unassigned' || name === parent) return;
   const { old, assign, color } = catEdit;
+  const keyOwn = $('catKey').value;
   if (old && name !== old && inCat(name, old)) return toast('Kategorii nie można przenieść do jej własnej podkategorii.', true);
   const cats = allCats();
   if (name !== old && cats.some(c => c.name === name) && old &&
@@ -1203,8 +1287,11 @@ $('catform').addEventListener('submit', async e => {
       await load(true);
       toast(`Zmieniono kategorię (${j.changed} ${plural(j.changed, 'projekt', 'projekty', 'projektów')})`);
     }
-    const next = allCats().map(c => c.name === name ? { ...c, own: color, color } : c);
-    if (!next.some(c => c.name === name)) next.push({ name, own: color, color, depth: name.split(SEP).length - 1 });
+    const taken = keyOwn && keyOwn !== '-';
+    // Skrót może mieć jedna kategoria: poprzednia właścicielka wraca do „automatycznie”.
+    const next = allCats().map(c => c.name === name ? { ...c, own: color, color, keyOwn }
+      : taken && c.keyOwn === keyOwn ? { ...c, keyOwn: '' } : c);
+    if (!next.some(c => c.name === name)) next.push({ name, own: color, color, keyOwn, depth: name.split(SEP).length - 1 });
     await saveCats(next);
     if (assign) await setCategory(assign, name);
     else if (!old) toast(`Dodano ${parent ? 'podkategorię' : 'kategorię'} „${catLabel(name)}”`);
@@ -1248,15 +1335,14 @@ document.addEventListener('keydown', e => {
   if (e.ctrlKey || e.metaKey) return;
   if (e.key.toLowerCase() === 'r') { load(); return; }
   if (!S.sel.size) return;
-  if (/^[0-9]$/.test(e.key)) {
-    const i = +e.key;
-    if (i === 0) return setCategory(selFolders(), '');
-    const c = allCats()[i - 1];
-    if (c) setCategory(selFolders(), c.name);
-  } else if (e.key.toLowerCase() === 'f') {
+  const k = e.key.toLowerCase();
+  if (k === '0') return setCategory(selFolders(), '');
+  if (k === 'f') {
     const fs = selFolders();
-    setFavorite(fs, !fs.every(f => S.by.get(f).favorite));
+    return setFavorite(fs, !fs.every(f => S.by.get(f).favorite));
   }
+  const c = k.length === 1 && allCats().find(x => x.hot === k);
+  if (c) setCategory(selFolders(), c.name);
 });
 let qTimer;
 $('q').addEventListener('input', () => {
@@ -1390,6 +1476,7 @@ Object.assign(S.f, store.get('filter', {}));
 if (!['name', 'date', 'cloud', 'category', 'size'].includes(S.f.sort)) S.f.sort = 'name';
 $('sort').value = S.f.sort;
 S.collapsed = new Set(store.get('collapsed', []));
+S.cloudOpen = new Set(store.get('cloudOpen', []));
 S.tile = store.get('tile', 190);
 $('tile').value = S.tile;
 document.documentElement.style.setProperty('--tile', S.tile + 'px');

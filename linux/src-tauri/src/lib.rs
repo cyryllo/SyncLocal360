@@ -8,7 +8,7 @@
 //! W Fusion strona rozmawia z serwerem HTTP w Pythonie (`synclocal_gallery.py`),
 //! tutaj z komendami Tauri poniżej. Format danych jest ten sam:
 //!   * `<projekt>/config.json`: `tag` (kategoria, "unassigned" = brak), `tags`, `note`, `favorite`,
-//!   * `<folder kopii>/synclocal_gallery.json`: lista kategorii (nazwa, kolor).
+//!   * `<folder kopii>/synclocal_gallery.json`: lista kategorii (nazwa, kolor, skrót `key`).
 //! Podkategorie oddziela `/` w nazwie (`Meble/Krzesła`), jak w `synclocal_gallery.py`.
 
 use serde::{Deserialize, Serialize};
@@ -23,6 +23,9 @@ use tauri_plugin_dialog::DialogExt;
 
 const NO_CATEGORY: &str = "unassigned";
 const CAT_SEP: char = '/';
+/// Skrót klawiszowy kategorii: "" = automatycznie (kolejna wolna cyfra), "-" = brak, albo jeden znak.
+/// F i R są zajęte (ulubione, odświeżanie), 0 usuwa kategorię.
+const HOTKEYS: &str = "123456789abcdeghijklmnopqstuvwxyz-";
 const CATEGORIES_FILE: &str = "synclocal_gallery.json";
 const MAX_RECENT: usize = 8;
 
@@ -376,17 +379,27 @@ fn scan_projects(vault: &Path) -> Vec<Value> {
         .collect()
 }
 
+fn clean_hotkey(key: &str) -> String {
+    let key = key.trim().to_lowercase();
+    if key.chars().count() == 1 && HOTKEYS.contains(key.as_str()) { key } else { String::new() }
+}
+
 /// Bez duplikatów; brakujące kategorie nadrzędne są dopisywane na końcu listy.
+/// Skrót klawiszowy (key) może mieć tylko jedna kategoria.
 fn clean_categories(list: Option<&Value>) -> Vec<Value> {
-    let mut cats: Vec<(String, String)> = Vec::new();   // (nazwa, kolor) w kolejności z listy
+    // (nazwa, kolor, skrót) w kolejności z listy
+    let mut cats: Vec<(String, String, String)> = Vec::new();
     if let Some(Value::Array(items)) = list {
         for c in items {
             let name = clean_category(&str_of(c.get("name")));
             if name.is_empty() { continue; }
-            let color = str_of(c.get("color"));
-            match cats.iter_mut().find(|(n, _)| *n == name) {
-                Some(found) => if found.1.is_empty() { found.1 = color },
-                None => cats.push((name, color)),
+            let (color, key) = (str_of(c.get("color")), clean_hotkey(&str_of(c.get("key"))));
+            match cats.iter_mut().find(|x| x.0 == name) {
+                Some(found) => {
+                    if found.1.is_empty() { found.1 = color }
+                    if found.2.is_empty() { found.2 = key }
+                }
+                None => cats.push((name, color, key)),
             }
         }
     }
@@ -394,12 +407,20 @@ fn clean_categories(list: Option<&Value>) -> Vec<Value> {
         let parts: Vec<String> = cats[k].0.split(CAT_SEP).map(String::from).collect();
         for i in 1..parts.len() {
             let parent = parts[..i].join("/");
-            if !cats.iter().any(|(n, _)| *n == parent) {
-                cats.push((parent, String::new()));
+            if !cats.iter().any(|x| x.0 == parent) {
+                cats.push((parent, String::new(), String::new()));
             }
         }
     }
-    cats.into_iter().map(|(name, color)| json!({ "name": name, "color": color })).collect()
+    let mut used: Vec<String> = Vec::new();
+    cats.into_iter().map(|(name, color, mut key)| {
+        if !key.is_empty() && key != "-" {
+            if used.contains(&key) { key.clear() } else { used.push(key.clone()) }
+        }
+        let mut item = json!({ "name": name, "color": color });
+        if !key.is_empty() { item["key"] = Value::String(key); }
+        item
+    }).collect()
 }
 
 fn load_categories(vault: &Path) -> Vec<Value> {
@@ -997,6 +1018,12 @@ mod category_tests {
             { "name": "A/B/C" }, { "name": "A", "color": "#1" }, { "name": "A/B/C", "color": "#2" }])));
         assert_eq!(c, vec![json!({ "name": "A/B/C", "color": "#2" }), json!({ "name": "A", "color": "#1" }),
             json!({ "name": "A/B", "color": "" })]);
+        // skróty: małe litery, zajęte i niedozwolone (f, r, 0) wypadają, "-" = brak
+        let c = clean_categories(Some(&json!([
+            { "name": "A", "key": "X" }, { "name": "B", "key": "x" }, { "name": "C", "key": "f" },
+            { "name": "D", "key": "-" }, { "name": "E", "key": "0" }, { "name": "F", "key": "7" }])));
+        let keys: Vec<String> = c.iter().map(|x| str_of(x.get("key"))).collect();
+        assert_eq!(keys, ["x", "", "", "-", "", "7"]);
     }
 
     #[test]

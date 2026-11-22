@@ -17,7 +17,7 @@ Dane:
       tags      - lista etykiet
       note      - notatka
       favorite  - ulubiony (bool)
-  * <folder kopii>/synclocal_gallery.json - lista kategorii (nazwa, kolor, kolejność);
+  * <folder kopii>/synclocal_gallery.json - lista kategorii (nazwa, kolor, kolejność, skrót "key");
     nazwa podkategorii to pełna ścieżka ("Meble/Krzesła"), kategoria nadrzędna jest zawsze na liście
 
 Uruchamianie:
@@ -45,6 +45,9 @@ SETTINGS_PATH = os.path.join(ADDIN_PATH, 'synclocal_settings.json')
 CATEGORIES_FILE = 'synclocal_gallery.json'
 NO_CATEGORY = 'unassigned'
 CAT_SEP = '/'
+# Skrót klawiszowy kategorii: '' = automatycznie (kolejna wolna cyfra), '-' = brak, albo jeden znak.
+# F i R są zajęte (ulubione, odświeżanie), 0 usuwa kategorię.
+HOTKEYS = set('123456789abcdeghijklmnopqstuvwxyz-')
 DEFAULT_PORT = 8360
 FUSION_EVENT_ID = 'SyncLocal360_GalleryEvent'
 
@@ -161,20 +164,40 @@ def scan_projects(vault):
     return items
 
 
+def _clean_hotkey(key):
+    key = str(key or '').strip().lower()
+    return key if key in HOTKEYS else ''
+
+
 def _clean_categories(categories):
-    """Bez duplikatów; brakujące kategorie nadrzędne są dopisywane na końcu listy."""
-    colors = {}                       # nazwa -> kolor, w kolejności z listy
+    """Bez duplikatów; brakujące kategorie nadrzędne są dopisywane na końcu listy.
+    Skrót klawiszowy (key) może mieć tylko jedna kategoria."""
+    cats = {}                         # nazwa -> {'color', 'key'}, w kolejności z listy
     for c in categories or []:
         if not isinstance(c, dict):
             continue
         name = clean_category(c.get('name'))
-        if name and not colors.get(name):
-            colors[name] = str(c.get('color') or '')
-    for name in list(colors):
+        if not name:
+            continue
+        cur = cats.setdefault(name, {'color': '', 'key': ''})
+        cur['color'] = cur['color'] or str(c.get('color') or '')
+        cur['key'] = cur['key'] or _clean_hotkey(c.get('key'))
+    for name in list(cats):
         parts = name.split(CAT_SEP)
         for i in range(1, len(parts)):
-            colors.setdefault(CAT_SEP.join(parts[:i]), '')
-    return [{'name': n, 'color': c} for n, c in colors.items()]
+            cats.setdefault(CAT_SEP.join(parts[:i]), {'color': '', 'key': ''})
+    used = set()
+    out = []
+    for name, c in cats.items():
+        key = c['key']
+        if key and key != '-':
+            key = '' if key in used else key
+            used.add(key)
+        item = {'name': name, 'color': c['color']}
+        if key:
+            item['key'] = key
+        out.append(item)
+    return out
 
 
 def load_categories(vault):
