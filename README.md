@@ -4,7 +4,11 @@
 
 SyncLocal360 pomaga wyjść z chmury Autodesk Fusion bez utraty dorobku. Pobiera całą bazę
 projektów na Twój dysk (`.f3d` + `.step` + miniatury), pozwala ją uporządkować w galerii
-i otwierać modele w programach dostępnych na Linuksie – FreeCAD, SolidCraft i innych.
+i otwierać modele w programach dostępnych na Linuksie – MitCad, FreeCAD, SolidCraft i innych.
+
+> **Pliki Fusion `.f3d` otworzysz na Linuksie.** Otwarty CAD [MitCad](https://mitcad.org/)
+> wczytuje `.f3d` razem z historią projektu, czyli szkicami, operacjami i parametrami, a nie tylko
+> jako „martwą” bryłę. Galeria SyncLocal360 sama znajduje MitCad i otwiera nim `.f3d` dwuklikiem.
 
 Projekt jest oparty na dodatku **NoCloud2** autorstwa **Kamila Sokalskiego**
 ([modelowanie3d.org](https://modelowanie3d.org)) – zob. [Autorzy i licencja](#autorzy-i-licencja).
@@ -51,14 +55,16 @@ Projekt składa się z dwóch części:
    systemów: **udostępniony katalog na NAS-ie** albo folder **Nextcloud** – zob.
    [Gdzie trzymać kopie](#gdzie-trzymać-kopie--windows-i-linux-razem).
 3. Kliknij **Kopia z chmury**, zaznacz projekty i włącz **„Dodatkowo eksportuj do STEP”**.
-   To ważne: na Linuksie otworzysz `.step`, a nie `.f3d`.
+   Plik `.f3d` otworzysz na Linuksie w [MitCad](https://mitcad.org/) z historią projektu.
+   `.step` przyda się do FreeCAD, SolidCraft i innych programów. Warto mieć oba.
 4. Poczekaj. Kopia idzie plik po pliku, a postęp widać w okienku.
    Duże bazy (setki plików, kilka GB) trwają godzinami – można przerwać i wznowić.
 
    ![Postęp kopii](docs/img/kopia-postep.png)
 
 5. **Na Linuksie** uruchom Galerię (AppImage), wskaż ten sam folder i gotowe:
-   wyszukiwanie, kategorie, etykiety, notatki i otwieranie `.step` w wybranym programie.
+   wyszukiwanie, kategorie, etykiety, notatki i otwieranie plików w wybranym programie:
+   `.f3d` w MitCad, `.step` w FreeCAD, SolidCraft lub innym.
 
    ![Model ze STEP otwarty z galerii w SolidCraft](docs/img/galeria-solidcraft.png)
 
@@ -209,7 +215,9 @@ Gdy w chmurze są dwa różne pliki o tej samej nazwie, dostają foldery `<Nazwa
 
 ## Ograniczenia – przeczytaj przed migracją
 
-- **`.f3d` otworzy tylko Fusion.** Na Linuksie pracujesz na `.step`.
+- **`.f3d` otwierają Fusion i MitCad.** [MitCad](https://mitcad.org/) wczytuje projekt z historią
+  (szkice, operacje, parametry). Nie każda operacja z Fusion musi mieć w nim odpowiednik, więc
+  ważne projekty sprawdź po otwarciu i zachowaj też `.step`.
 - **STEP to sama geometria** – bez historii operacji, parametrów, szkiców i ograniczeń z Fusion.
   W FreeCAD i innych programach model jest „bryłą”, którą można dalej obrabiać, ale nie
   edytować tak jak w Fusion. Zachowaj `.f3d` na wypadek powrotu do Fusion.
@@ -233,6 +241,11 @@ nie przepadnie.
 
 **Niektóre projekty nie mają miniatury.** Kopia z „Pomiń” dociągnie brakujące miniatury.
 Jeśli folder synchronizujesz (np. Nextcloud), sprawdź też, czy klient wysłał pliki `.png`.
+
+**Czym otworzę pliki `.f3d` na Linuksie?** Programem [MitCad](https://mitcad.org/) (otwarty,
+licencja MIT, AppImage). Otwiera `.f3d` z historią projektu. Galeria SyncLocal360 sama go wykrywa,
+jeśli plik `Mitcad-*.AppImage` leży np. na Pulpicie albo w `~/Aplikacje`, i dodaje przycisk „MitCad”
+przy pliku `.f3d`.
 
 **Czy mogę wrócić do Fusion?** Tak – `.f3d` zawiera cały projekt. „Przywróć do chmury”
 wgra kopie z powrotem, także na inne konto.

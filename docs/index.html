@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SyncLocal360 – projekty z Fusion 360 na Linuksie</title>
-<meta name="description" content="Pobierz całą bazę projektów z chmury Fusion 360 na dysk (.f3d, STEP, miniatury), uporządkuj ją w galerii i otwieraj na Linuksie w FreeCAD, SolidCraft i innych programach.">
+<meta name="description" content="Pobierz całą bazę projektów z chmury Fusion 360 na dysk (.f3d, STEP, miniatury), uporządkuj ją w galerii i otwieraj na Linuksie – pliki .f3d z historią projektu w MitCad, STEP w FreeCAD, SolidCraft i innych programach.">
 <meta property="og:title" content="SyncLocal360 – projekty z Fusion 360 na Linuksie">
-<meta property="og:description" content="Kopia całej chmury Fusion na dysk, eksport STEP, galeria z kategoriami i otwieranie modeli w programach na Linuksa.">
+<meta property="og:description" content="Kopia całej chmury Fusion na dysk, eksport STEP, galeria z kategoriami i otwieranie modeli na Linuksie – także plików .f3d z historią projektu w MitCad.">
 <meta property="og:image" content="img/galeria.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='1' width='6' height='6' rx='1.5' fill='%232c7be5'/%3E%3Crect x='9' y='1' width='6' height='6' rx='1.5' fill='%232c7be5' opacity='.6'/%3E%3Crect x='1' y='9' width='6' height='6' rx='1.5' fill='%232c7be5' opacity='.6'/%3E%3Crect x='9' y='9' width='6' height='6' rx='1.5' fill='%232c7be5'/%3E%3C/svg%3E">
 <style>
@@ -238,7 +238,9 @@ footer small { color: var(--faint); }
     <h1>Zabierz swoje projekty z&nbsp;Fusion 360 <span>na&nbsp;Linuksa</span></h1>
     <p class="lead">SyncLocal360 pobiera całą bazę projektów z chmury Fusion na Twój dysk
       – pliki <code>.f3d</code>, <code>.step</code> i miniatury – a potem pozwala ją przeglądać,
-      porządkować i otwierać w programach dostępnych na Linuksie.</p>
+      porządkować i otwierać w programach dostępnych na Linuksie.
+      Pliki <code>.f3d</code> otworzysz w <a href="https://mitcad.org/">MitCad</a> – z historią projektu,
+      czyli szkicami, operacjami i parametrami.</p>
     <div class="cta">
       <a class="btn primary" data-gh="releases" href="#instalacja">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
@@ -313,7 +315,8 @@ footer small { color: var(--faint); }
         <div>
           <h3>Przeglądaj i otwieraj na Linuksie</h3>
           <p>Uruchom Galerię (AppImage) i wskaż folder. Szukaj, porządkuj w kategorie,
-            a dwuklikiem otwieraj STEP w wybranym programie – FreeCAD, SolidCraft lub innym.</p>
+            a dwuklikiem otwieraj projekty: <code>.f3d</code> w MitCad (z historią projektu),
+            <code>.step</code> w FreeCAD, SolidCraft lub innym programie.</p>
         </div>
         <div class="media">
           <a href="img/galeria-solidcraft.png"><img src="img/galeria-solidcraft.png" width="2000" height="806" alt="Model domku ze STEP otwarty z galerii w SolidCraft na Linuksie" loading="lazy"></a>
@@ -348,6 +351,7 @@ footer small { color: var(--faint); }
         <ul class="feat">
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Szybkie przeglądanie</b><span>Setki projektów w siatce miniatur, wyszukiwanie po nazwie, folderze, etykiecie i notatce.</span></div></li>
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Kategorie, etykiety, notatki</b><span>Klawisze 1–9 albo przeciąganie przypisują kategorię wielu projektom naraz.</span></div></li>
+          <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Pliki <code>.f3d</code> w MitCad</b><span>Projekt z Fusion otwiera się z historią: szkice, operacje, parametry. MitCad jest wykrywany automatycznie.</span></div></li>
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Otwieranie w Twoich programach</b><span>Lista programów z poleceniami, wybór programu na dwuklik.</span></div></li>
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Poprawny widok w FreeCAD</b><span>Model otwiera się dopasowany do okna, w widoku izometrycznym.</span></div></li>
           <li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><div><b>Jasny i ciemny motyw</b><span>Dopasowuje się do ustawień systemu.</span></div></li>
@@ -403,7 +407,7 @@ footer small { color: var(--faint); }
     <div class="warn">
       <h3><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>Ograniczenia</h3>
       <ul>
-        <li><b>Plik <code>.f3d</code> otworzy tylko Fusion.</b> Na Linuksie pracujesz na <code>.step</code>.</li>
+        <li><b>Plik <code>.f3d</code> otworzą Fusion i <a href="https://mitcad.org/">MitCad</a>.</b> MitCad wczytuje historię projektu, ale nie każda operacja z Fusion musi mieć w nim odpowiednik – ważne projekty sprawdź i zachowaj też <code>.step</code>.</li>
         <li><b>STEP to sama geometria</b> – bez historii operacji, parametrów i szkiców z Fusion. Zachowaj <code>.f3d</code> na wypadek powrotu.</li>
         <li><b>Do pobrania potrzebny jest Fusion</b> na Windows lub macOS – dodatek korzysta z jego API. Na Linuksie samego Fusion nie ma.</li>
         <li>Kopia obejmuje <b>aktywny hub</b> (zespół) i <b>najnowszą wersję</b> każdego pliku, bez historii wersji z chmury.</li>
@@ -468,7 +472,7 @@ footer small { color: var(--faint); }
     </details>
     <details>
       <summary>Czym otworzę modele na Linuksie?</summary>
-      <p>Pliki <code>.f3d</code> otworzy MitCad – razem z historią projektu (szkice, operacje, parametry).
+      <p>Pliki <code>.f3d</code> otworzy <a href="https://mitcad.org/">MitCad</a> (otwarty, licencja MIT) – razem z historią projektu (szkice, operacje, parametry).
         Pliki <code>.step</code> otworzy m.in. FreeCAD, SolidCraft i MitCad. Galeria pozwala dodać dowolny
         program przez polecenie z <code>%f</code> i wybrać, który uruchamia się po dwukliku.</p>
     </details>
