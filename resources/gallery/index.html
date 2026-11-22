@@ -154,6 +154,12 @@ aside.side {
 .row:hover .edit { display: block; }
 .row:hover .cnt { display: none; }
 .row .edit:hover { color: var(--accent); }
+.row .tw {
+  width: 14px; flex: none; margin-right: -5px; text-align: center; color: var(--faint);
+  font-size: 10px; line-height: 1; border-radius: 3px; transition: transform .1s;
+}
+.row .tw.open { transform: rotate(90deg); }
+.row .tw[data-toggle]:hover { color: var(--accent); background: var(--surface-2); }
 .row.drop { outline: 2px dashed var(--accent); outline-offset: -2px; background: var(--accent-soft); }
 .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 .ico { width: 14px; height: 14px; flex: none; color: var(--muted); }
@@ -258,6 +264,8 @@ aside.panel {
 .catpick button:hover { border-color: var(--border-strong); }
 .catpick button.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .catpick button.add { color: var(--muted); border-style: dashed; }
+.catpick.sub { margin-top: 6px; padding: 6px 0 0 10px; border-left: 2px solid var(--border); }
+.catpick.sub .in { flex: 1 1 100%; font-size: 11.5px; color: var(--faint); }
 .catpick .key {
   font: 10px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--faint);
   padding: 2px 4px; border: 1px solid var(--border); border-radius: 3px; margin-left: 2px;
@@ -307,6 +315,11 @@ dialog input[type=text]:focus { outline: none; border-color: var(--accent); }
 .swatches { display: flex; flex-wrap: wrap; gap: 8px; }
 .swatches button { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; padding: 0; }
 .swatches button.active { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text); }
+.swatches button.inh { border: 2px dashed var(--surface); color: #fff; font-size: 12px; line-height: 1; }
+dialog select {
+  width: 100%; height: 34px; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-2);
+}
 .dlgbtns { display: flex; gap: 8px; margin-top: 18px; }
 dialog.wide { width: min(680px, 94vw); }
 .vaultrow { display: flex; gap: 8px; align-items: center; }
@@ -410,6 +423,8 @@ dialog code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospac
     <h3 id="catTitle">Nowa kategoria</h3>
     <label for="catName">Nazwa</label>
     <input type="text" id="catName" maxlength="60" autocomplete="off" required>
+    <label for="catParent">Kategoria nadrzędna</label>
+    <select id="catParent"></select>
     <label>Kolor</label>
     <div class="swatches" id="swatches"></div>
     <div class="dlgbtns">
@@ -450,11 +465,18 @@ const PALETTE = ['#2c7be5', '#16a34a', '#e8a317', '#dc4a3d', '#8b5cf6', '#db2777
                  '#0d9488', '#ea7317', '#64748b', '#65a30d', '#0891b2', '#a16207'];
 const REASONS = { cloud_backup: 'Kopia z chmury', manual: 'Szybki Zapis', autosave: 'Autozapis' };
 const NONE_CLOUD = '\u0000';
+// Podkategorie: pełna nazwa to ścieżka z "/", np. "Meble/Krzesła" (pole tag w config.json).
+const SEP = '/';
+const cleanCat = s => String(s ?? '').split(SEP).map(x => x.trim()).filter(Boolean).join(SEP);
+const parentOf = n => n.includes(SEP) ? n.slice(0, n.lastIndexOf(SEP)) : '';
+const leafOf = n => n.slice(n.lastIndexOf(SEP) + 1);
+const inCat = (cat, root) => !!cat && (cat === root || cat.startsWith(root + SEP));
+const catLabel = n => String(n).split(SEP).join(' › ');
 
 const S = {
   projects: [], by: new Map(), cats: [], fusion: false, vault: '',
   app: '', apps: null, recent: [], thumbBase: '/files/', needVault: false, dblclick: null,
-  sel: new Set(), anchor: null, visible: [], lastLoad: 0,
+  sel: new Set(), anchor: null, visible: [], lastLoad: 0, collapsed: new Set(),
   f: { view: 'all', cloud: '', tag: '', q: '', sort: 'name' },
   tile: 190,
 };
@@ -529,11 +551,13 @@ function prep(p) {
   return p;
 }
 function setProjects(list) {
+  catMemo = null;
   S.projects = list.map(prep);
   S.by = new Map(S.projects.map(p => [p.folder, p]));
   for (const f of [...S.sel]) if (!S.by.has(f)) S.sel.delete(f);
 }
 function mergeProjects(list) {
+  catMemo = null;
   for (const p of list) {
     prep(p);
     const old = S.by.get(p.folder);
@@ -541,16 +565,51 @@ function mergeProjects(list) {
     S.by.set(p.folder, p);
   }
 }
-// Kategorie: zdefiniowane w synclocal_gallery.json + te, które są tylko w config.json.
+// Kategorie: zdefiniowane w synclocal_gallery.json + te, które są tylko w config.json,
+// ułożone w drzewo (podkategoria zaraz po swojej nadrzędnej). Brakujące nadrzędne są dopisywane.
+// Pola: name (pełna ścieżka), leaf, depth, kids, color (wyliczony), own (zapisany, może być '').
+let catMemo = null;
+function setCats(list) { S.cats = list || []; catMemo = null; }
 function allCats() {
-  const out = S.cats.map(c => ({ ...c }));
-  const known = new Set(out.map(c => c.name));
-  const extra = [...new Set(S.projects.map(p => p.category).filter(c => c && !known.has(c)))]
-    .sort(collator.compare);
-  for (const name of extra) out.push({ name, color: '' });
-  out.forEach((c, i) => { if (!c.color) c.color = PALETTE[i % PALETTE.length]; });
-  return out;
+  if (catMemo) return catMemo;
+  const own = new Map();
+  const add = (raw, color) => {
+    const n = cleanCat(raw);
+    if (n && n !== 'unassigned' && !own.get(n)) own.set(n, color || '');
+  };
+  S.cats.forEach(c => add(c.name, c.color));
+  [...new Set(S.projects.map(p => p.category).filter(Boolean))].sort(collator.compare).forEach(n => add(n, ''));
+  for (const n of [...own.keys()]) {          // brakujące nadrzędne na końcu
+    const parts = n.split(SEP);
+    for (let i = 1; i < parts.length; i++) add(parts.slice(0, i).join(SEP), '');
+  }
+  const kids = new Map();
+  for (const n of own.keys()) {
+    const p = parentOf(n);
+    if (!kids.has(p)) kids.set(p, []);
+    kids.get(p).push(n);
+  }
+  const out = [];
+  let top = 0;
+  const usedTop = new Set((kids.get('') || []).map(n => own.get(n)).filter(Boolean));
+  const freeColor = () => {
+    const c = PALETTE.find(x => !usedTop.has(x)) || PALETTE[top % PALETTE.length];
+    usedTop.add(c);
+    return c;
+  };
+  const walk = (parent, inherited, depth) => {
+    for (const n of kids.get(parent) || []) {
+      const color = own.get(n) || inherited || freeColor();
+      if (!parent) top++;
+      out.push({ name: n, leaf: leafOf(n), depth, kids: kids.has(n), color, own: own.get(n) });
+      walk(n, color, depth + 1);
+    }
+  };
+  walk('', '', 0);
+  return (catMemo = out);
 }
+// Do zapisu: kategoria główna zapamiętuje kolor, podkategoria bez własnego dziedziczy go.
+const catsForSave = list => list.map(c => ({ name: c.name, color: c.own || (c.depth ? '' : c.color) }));
 const catColor = name => (allCats().find(c => c.name === name) || {}).color || 'var(--faint)';
 function allTags() {
   const m = new Map();
@@ -561,7 +620,7 @@ function allTags() {
 async function load(quiet) {
   try {
     const j = await api('/api/state');
-    S.vault = j.vault; S.fusion = j.fusion; S.cats = j.categories;
+    S.vault = j.vault; S.fusion = j.fusion; setCats(j.categories);
     S.app = j.app || ''; S.apps = j.apps || null; S.recent = j.recent || [];
     S.dblclick = j.dblclick ?? null;
     S.thumbBase = j.thumb_base || '/files/';
@@ -579,7 +638,7 @@ async function update(folders, changes, msg) {
   try {
     const j = await api('/api/projects', { folders, ...changes });
     mergeProjects(j.projects);
-    S.cats = j.categories;
+    setCats(j.categories);
     renderAll();
     if (msg) toast(msg);
   } catch (e) { toast(e.message, true); }
@@ -588,13 +647,13 @@ const selFolders = () => [...S.sel];
 function setCategory(folders, cat) {
   const n = folders.length;
   const who = n === 1 ? `„${S.by.get(folders[0]).name}”` : `${n} ${plural(n, 'projekt', 'projekty', 'projektów')}`;
-  return update(folders, { category: cat }, cat ? `${who} → ${cat}` : `${who}: bez kategorii`);
+  return update(folders, { category: cat }, cat ? `${who} → ${catLabel(cat)}` : `${who}: bez kategorii`);
 }
 function setFavorite(folders, on) {
   return update(folders, { favorite: on }, on ? 'Dodano do ulubionych' : 'Usunięto z ulubionych');
 }
 async function saveCats(cats) {
-  try { S.cats = (await api('/api/categories', { categories: cats })).categories; renderAll(); }
+  try { setCats((await api('/api/categories', { categories: catsForSave(cats) })).categories); renderAll(); }
   catch (e) { toast(e.message, true); }
 }
 
@@ -605,28 +664,31 @@ function computeVisible() {
   const list = S.projects.filter(p => {
     if (f.view === 'none' && p.category) return false;
     if (f.view === 'fav' && !p.favorite) return false;
-    if (f.view.startsWith('cat:') && p.category !== f.view.slice(4)) return false;
+    if (f.view.startsWith('cat:') && !inCat(p.category, f.view.slice(4))) return false;
     if (f.cloud && (p.cloud_project || NONE_CLOUD) !== f.cloud) return false;
     if (f.tag && !p.tags.includes(f.tag)) return false;
     for (const w of words) if (!p._s.includes(w)) return false;
     return true;
   });
   const byName = (a, b) => collator.compare(a.name, b.name);
+  const catPos = new Map(allCats().map((c, i) => [c.name, i]));
   const sorts = {
     name: byName,
     date: (a, b) => (b.last_saved || '').localeCompare(a.last_saved || '') || byName(a, b),
     cloud: (a, b) => collator.compare(a.cloud_project, b.cloud_project) ||
       collator.compare(a.cloud_folder, b.cloud_folder) || byName(a, b),
-    category: (a, b) => (!a.category - !b.category) || collator.compare(a.category, b.category) || byName(a, b),
+    category: (a, b) => (!a.category - !b.category) ||
+      (catPos.get(a.category) ?? 0) - (catPos.get(b.category) ?? 0) || byName(a, b),
     size: (a, b) => ((b.files.f3d || {}).size || 0) - ((a.files.f3d || {}).size || 0) || byName(a, b),
   };
   list.sort(sorts[f.sort] || byName);
   S.visible = list;
   return list;
 }
+const saveFilter = () => store.set('filter', { view: S.f.view, cloud: S.f.cloud, tag: S.f.tag, sort: S.f.sort });
 function setFilter(patch) {
   Object.assign(S.f, patch);
-  store.set('filter', { view: S.f.view, cloud: S.f.cloud, tag: S.f.tag, sort: S.f.sort });
+  saveFilter();
   renderSide(); renderGrid(); renderStatus();
   document.querySelector('main').scrollTop = 0;
 }
@@ -652,13 +714,23 @@ function renderSide() {
   h += '<div class="sec">Kategorie <button data-act="newcat" title="Nowa kategoria">+ Nowa</button></div>';
   const cats = allCats();
   if (!cats.length) h += '<div class="hint">Brak kategorii. Utwórz pierwszą i przeciągnij na nią projekty.</div>';
-  cats.forEach((c, i) => {
-    h += row(`data-view="cat:${esc(c.name)}"`,
-      `<span class="dot" style="background:${esc(c.color)}"></span><span class="lbl">${esc(c.name)}</span>` +
-      `<span class="cnt">${count(p => p.category === c.name)}</span>` +
+  const tree = cats.some(c => c.kids);
+  let hideBelow = null;   // zwinięta kategoria: jej podkategorii nie pokazuj
+  for (const c of cats) {
+    if (hideBelow && inCat(c.name, hideBelow)) continue;
+    hideBelow = null;
+    const closed = c.kids && S.collapsed.has(c.name);
+    if (closed) hideBelow = c.name;
+    const tw = !tree ? '' : c.kids
+      ? `<span class="tw${closed ? '' : ' open'}" data-toggle="${esc(c.name)}" title="${closed ? 'Rozwiń' : 'Zwiń'}">▶</span>`
+      : '<span class="tw"></span>';
+    h += row(`data-view="cat:${esc(c.name)}" title="${esc(catLabel(c.name))}"${c.depth ? ` style="padding-left:${8 + c.depth * 16}px"` : ''}`,
+      `${tw}<span class="dot" style="background:${esc(c.color)}"></span><span class="lbl">${esc(c.leaf)}</span>` +
+      `<span class="cnt">${count(p => inCat(p.category, c.name))}</span>` +
+      `<span class="edit" data-subcat="${esc(c.name)}" title="Nowa podkategoria">+</span>` +
       `<span class="edit" data-editcat="${esc(c.name)}" title="Edytuj kategorię">✎</span>`,
       f.view === 'cat:' + c.name, 'cat:' + c.name);
-  });
+  }
 
   const clouds = new Map();
   for (const p of P) { const k = p.cloud_project || NONE_CLOUD; clouds.set(k, (clouds.get(k) || 0) + 1); }
@@ -678,6 +750,16 @@ function renderSide() {
 $('side').addEventListener('click', e => {
   const ed = e.target.closest('[data-editcat]');
   if (ed) { e.stopPropagation(); return openCatDialog(ed.dataset.editcat); }
+  const sub = e.target.closest('[data-subcat]');
+  if (sub) { e.stopPropagation(); return openCatDialog(null, null, sub.dataset.subcat); }
+  const tg = e.target.closest('[data-toggle]');
+  if (tg) {
+    e.stopPropagation();
+    const n = tg.dataset.toggle;
+    S.collapsed.has(n) ? S.collapsed.delete(n) : S.collapsed.add(n);
+    store.set('collapsed', [...S.collapsed]);
+    return renderSide();
+  }
   if (e.target.closest('[data-act="newcat"]')) return openCatDialog(null);
   const r = e.target.closest('.row'); if (!r) return;
   if (r.dataset.view) setFilter({ view: r.dataset.view });
@@ -719,7 +801,7 @@ function makeCard(p) {
     : PH;
   const sub = p.cloud_project ? [p.cloud_project, p.cloud_folder].filter(Boolean).join(' / ') : 'Szybki Zapis';
   let chips = '';
-  if (p.category) chips += `<span class="chip"><span class="dot" style="background:${esc(catColor(p.category))}"></span>${esc(p.category)}</span>`;
+  if (p.category) chips += `<span class="chip" title="${esc(catLabel(p.category))}"><span class="dot" style="background:${esc(catColor(p.category))}"></span>${esc(catLabel(p.category))}</span>`;
   for (const t of p.tags.slice(0, 3)) chips += `<span class="chip tag">#${esc(t)}</span>`;
   if (p.tags.length > 3) chips += `<span class="chip tag">+${p.tags.length - 3}</span>`;
   el.innerHTML =
@@ -759,7 +841,7 @@ function renderStatus() {
   const chip = (label, key) => `<span class="chipf">${label}<button data-clear="${key}" title="Usuń filtr">×</button></span>`;
   if (f.view === 'fav') h += chip('Ulubione', 'view');
   if (f.view === 'none') h += chip('Bez kategorii', 'view');
-  if (f.view.startsWith('cat:')) h += chip(`<span class="dot" style="background:${esc(catColor(f.view.slice(4)))}"></span>${esc(f.view.slice(4))}`, 'view');
+  if (f.view.startsWith('cat:')) h += chip(`<span class="dot" style="background:${esc(catColor(f.view.slice(4)))}"></span>${esc(catLabel(f.view.slice(4)))}`, 'view');
   if (f.cloud) h += chip(f.cloud === NONE_CLOUD ? 'Szybki Zapis' : '☁ ' + esc(f.cloud), 'cloud');
   if (f.tag) h += chip('#' + esc(f.tag), 'tag');
   if (f.q) h += chip('„' + esc(f.q) + '”', 'q');
@@ -820,16 +902,32 @@ function renderSelection() {
 }
 
 // ---------- panel ----------
+// Kategorie główne, a pod nimi podkategorie kolejnych poziomów wybranej kategorii.
 function catPicker(current, mixed) {
   const cats = allCats();
+  const key = new Map(cats.map((c, i) => [c.name, i]));
+  const active = mixed ? '' : current;
+  const pill = c => {
+    const i = key.get(c.name);
+    const on = active === c.name, path = !on && inCat(active, c.name);
+    return `<button data-setcat="${esc(c.name)}" class="${on || path ? 'active' : ''}"${path ? ' style="font-weight:500"' : ''}` +
+      ` title="${esc(catLabel(c.name))}${i < 9 ? ` · skrót: ${i + 1}` : ''}">` +
+      `<span class="dot" style="background:${esc(c.color)}"></span>${esc(c.leaf)}` +
+      (i < 9 ? ` <span class="key">${i + 1}</span>` : '') + `</button>`;
+  };
   let h = '<div class="catpick">';
   h += `<button data-setcat="" class="${!mixed && !current ? 'active' : ''}" title="Skrót: 0">Brak <span class="key">0</span></button>`;
-  cats.forEach((c, i) => {
-    h += `<button data-setcat="${esc(c.name)}" class="${!mixed && current === c.name ? 'active' : ''}"${i < 9 ? ` title="Skrót: ${i + 1}"` : ''}>` +
-      `<span class="dot" style="background:${esc(c.color)}"></span>${esc(c.name)}` +
-      (i < 9 ? ` <span class="key">${i + 1}</span>` : '') + `</button>`;
-  });
+  h += cats.filter(c => !c.depth).map(pill).join('');
   h += '<button class="add" data-act="newcat-assign">+ Nowa…</button></div>';
+  // Dla "Meble/Krzesła/Biurowe": podkategorie "Meble", potem "Meble/Krzesła", potem "…/Biurowe".
+  const parts = active ? active.split(SEP) : [];
+  for (let d = 1; d <= parts.length; d++) {
+    const parent = parts.slice(0, d).join(SEP);
+    const kids = cats.filter(c => parentOf(c.name) === parent);
+    if (!kids.length) continue;   // nową podkategorię pustej kategorii dodaje „+” w panelu po lewej
+    h += `<div class="catpick sub"><span class="in">${esc(catLabel(parent))} ›</span>` + kids.map(pill).join('') +
+      `<button class="add" data-act="newsub-assign" data-parent="${esc(parent)}">+ Podkategoria…</button></div>`;
+  }
   return h;
 }
 function tagList() {
@@ -852,8 +950,8 @@ function summaryHtml() {
   h += '<h3>Kategorie</h3><div class="bars">';
   const max = Math.max(1, P.length);
   for (const c of allCats()) {
-    const k = P.filter(p => p.category === c.name).length;
-    h += `<div class="bar"><span>${esc(c.name)}</span><span class="cnt">${k}</span><i><span style="width:${k / max * 100}%;background:${esc(c.color)}"></span></i></div>`;
+    const k = P.filter(p => inCat(p.category, c.name)).length;
+    h += `<div class="bar"${c.depth ? ` style="padding-left:${c.depth * 14}px"` : ''}><span>${esc(c.leaf)}</span><span class="cnt">${k}</span><i><span style="width:${k / max * 100}%;background:${esc(c.color)}"></span></i></div>`;
   }
   h += `<div class="bar"><span style="color:var(--muted)">Bez kategorii</span><span class="cnt">${none}</span><i><span style="width:${none / max * 100}%;background:var(--border-strong)"></span></i></div></div>`;
   h += `<h3>Jak przypisywać</h3>
@@ -863,13 +961,14 @@ function summaryHtml() {
       <kbd>Ctrl+klik</kbd><span>zaznacz kilka</span>
       <kbd>Shift+klik</kbd><span>zaznacz zakres</span>
       <kbd>Ctrl+A</kbd><span>zaznacz widoczne</span>
-      <kbd>1–9</kbd><span>przypisz kategorię zaznaczonym</span>
+      <kbd>1–9</kbd><span>przypisz kategorię zaznaczonym (kolejność z listy po lewej)</span>
       <kbd>0</kbd><span>usuń kategorię</span>
       <kbd>F</kbd><span>ulubione</span>
       <kbd>/</kbd><span>szukaj</span>
       <kbd>Esc</kbd><span>odznacz</span>
     </div>
-    <p class="hint" style="padding:12px 0 0">Projekty możesz też przeciągnąć na kategorię w panelu po lewej.</p>
+    <p class="hint" style="padding:12px 0 0">Projekty możesz też przeciągnąć na kategorię w panelu po lewej.
+      Podkategorię dodasz przyciskiem <b>+</b> przy kategorii (po najechaniu myszą).</p>
     <p class="hint credit">SyncLocal360 · Cyryl Sochacki<br>na bazie dodatku NoCloud2 autorstwa Kamila Sokalskiego
       (<a href="https://modelowanie3d.org" target="_blank" rel="noopener">modelowanie3d.org</a>)</p>`;
   return h;
@@ -970,7 +1069,7 @@ function bulkHtml() {
   for (const p of ps) for (const t of p.tags) tags.set(t, (tags.get(t) || 0) + 1);
   const favs = ps.filter(p => p.favorite).length;
   let h = `<h2>Zaznaczono ${n} ${plural(n, 'projekt', 'projekty', 'projektów')}</h2>`;
-  h += `<div class="path">${mixed ? 'Różne kategorie' : (ps[0].category ? 'Kategoria: ' + esc(ps[0].category) : 'Bez kategorii')}</div>`;
+  h += `<div class="path">${mixed ? 'Różne kategorie' : (ps[0].category ? 'Kategoria: ' + esc(catLabel(ps[0].category)) : 'Bez kategorii')}</div>`;
   h += `<h3>Przypisz kategorię wszystkim</h3>${catPicker(ps[0].category, mixed)}`;
   h += `<h3>Etykiety</h3><div class="tagbox">` +
     [...tags.entries()].sort((a, b) => collator.compare(a[0], b[0])).map(([t, k]) =>
@@ -1009,6 +1108,7 @@ $('panel').addEventListener('click', async e => {
   else if (act === 'unfavall') setFavorite(folders, false);
   else if (act === 'clear') { S.sel.clear(); renderSelection(); }
   else if (act === 'newcat-assign') openCatDialog(null, folders);
+  else if (act === 'newsub-assign') openCatDialog(null, folders, t.closest('[data-parent]').dataset.parent);
 });
 $('panel').addEventListener('keydown', e => {
   if (e.target.id === 'tagInput' && (e.key === 'Enter' || e.key === ',')) {
@@ -1026,63 +1126,101 @@ $('panel').addEventListener('focusout', e => {
 });
 
 // ---------- okno kategorii ----------
-let catEdit = null;   // { old: nazwa|null, assign: [foldery]|null, color }
-function openCatDialog(name, assign) {
+let catEdit = null;   // { old: pełna nazwa|null, assign: [foldery]|null, color: ''|kolor ('' = jak nadrzędna) }
+function openCatDialog(name, assign, parent) {
   const cats = allCats();
   const c = name ? cats.find(x => x.name === name) : null;
-  const used = new Set(cats.map(x => x.color));
+  parent = name ? parentOf(name) : (parent || '');
+  const used = new Set(cats.filter(x => !x.depth).map(x => x.color));
   catEdit = { old: name, assign: assign || null,
-    color: c ? c.color : (PALETTE.find(x => !used.has(x)) || PALETTE[cats.length % PALETTE.length]) };
-  $('catTitle').textContent = name ? 'Edytuj kategorię' : (assign ? 'Nowa kategoria dla zaznaczonych' : 'Nowa kategoria');
-  $('catName').value = name || '';
+    color: c ? (c.depth ? c.own : c.color)
+      : parent ? '' : (PALETTE.find(x => !used.has(x)) || PALETTE[cats.length % PALETTE.length]) };
+  $('catTitle').textContent = name ? 'Edytuj kategorię'
+    : (parent ? 'Nowa podkategoria' : 'Nowa kategoria') + (assign ? ' dla zaznaczonych' : '');
+  $('catName').value = name ? leafOf(name) : '';
+  // Nadrzędną może być każda kategoria poza edytowaną i jej podkategoriami.
+  $('catParent').innerHTML = '<option value="">— brak (kategoria główna) —</option>' +
+    cats.filter(x => !(name && inCat(x.name, name))).map(x =>
+      `<option value="${esc(x.name)}">${'\u00a0\u00a0\u00a0'.repeat(x.depth)}${esc(x.leaf)}</option>`).join('');
+  $('catParent').value = parent;
   $('catDelete').hidden = !name;
   renderSwatches();
   $('catdlg').showModal();
   $('catName').select();
 }
 function renderSwatches() {
-  $('swatches').innerHTML = PALETTE.map(c =>
+  const parent = $('catParent').value;
+  let h = '';
+  if (parent) {
+    h += `<button type="button" data-c="" class="inh${catEdit.color ? '' : ' active'}" style="background:${esc(catColor(parent))}"` +
+      ` title="Jak kategoria nadrzędna" aria-label="Jak kategoria nadrzędna">↑</button>`;
+  }
+  h += PALETTE.map(c =>
     `<button type="button" data-c="${c}" style="background:${c}" class="${c === catEdit.color ? 'active' : ''}" aria-label="${c}"></button>`).join('');
+  $('swatches').innerHTML = h;
 }
+$('catParent').addEventListener('change', () => {
+  if (!$('catParent').value && !catEdit.color) catEdit.color = PALETTE[0];
+  renderSwatches();
+});
 $('swatches').addEventListener('click', e => {
   const b = e.target.closest('[data-c]'); if (!b) return;
   catEdit.color = b.dataset.c; renderSwatches();
 });
 $('catCancel').addEventListener('click', () => $('catdlg').close());
+// Po zmianie nazwy lub usunięciu: filtr i zwinięte gałęzie idą za kategorią.
+function movedCat(old, name) {
+  const move = n => inCat(n, old) ? (name ? name + n.slice(old.length) : '') : n;
+  if (S.f.view.startsWith('cat:')) {
+    const v = move(S.f.view.slice(4));
+    S.f.view = v ? 'cat:' + v : (name === '' && parentOf(old) ? 'cat:' + parentOf(old) : 'all');
+    saveFilter();
+  }
+  S.collapsed = new Set([...S.collapsed].map(move).filter(Boolean));
+  store.set('collapsed', [...S.collapsed]);
+}
 $('catform').addEventListener('submit', async e => {
   e.preventDefault();
-  const name = $('catName').value.trim();
-  if (!name || name === 'unassigned') return;
+  const parent = $('catParent').value;
+  const name = cleanCat((parent ? parent + SEP : '') + $('catName').value);
+  if (!name || leafOf(name) === 'unassigned' || name === parent) return;
   const { old, assign, color } = catEdit;
+  if (old && name !== old && inCat(name, old)) return toast('Kategorii nie można przenieść do jej własnej podkategorii.', true);
   const cats = allCats();
   if (name !== old && cats.some(c => c.name === name) && old &&
-      !confirm(`Kategoria „${name}” już istnieje. Połączyć z nią „${old}”?`)) return;
+      !confirm(`Kategoria „${catLabel(name)}” już istnieje. Połączyć z nią „${catLabel(old)}”?`)) return;
   $('catdlg').close();
   try {
     if (old && name !== old) {
       const j = await api('/api/categories/rename', { old, new: name });
-      S.cats = j.categories;
-      if (S.f.view === 'cat:' + old) S.f.view = 'cat:' + name;
+      setCats(j.categories);
+      movedCat(old, name);
       await load(true);
-      toast(`Zmieniono nazwę (${j.changed} ${plural(j.changed, 'projekt', 'projekty', 'projektów')})`);
+      toast(`Zmieniono kategorię (${j.changed} ${plural(j.changed, 'projekt', 'projekty', 'projektów')})`);
     }
-    const next = allCats().map(c => c.name === name ? { ...c, color } : c);
-    if (!next.some(c => c.name === name)) next.push({ name, color });
+    const next = allCats().map(c => c.name === name ? { ...c, own: color, color } : c);
+    if (!next.some(c => c.name === name)) next.push({ name, own: color, color, depth: name.split(SEP).length - 1 });
     await saveCats(next);
     if (assign) await setCategory(assign, name);
-    else if (!old) toast(`Dodano kategorię „${name}”`);
+    else if (!old) toast(`Dodano ${parent ? 'podkategorię' : 'kategorię'} „${catLabel(name)}”`);
   } catch (err) { toast(err.message, true); }
 });
 $('catDelete').addEventListener('click', async () => {
-  const old = catEdit.old;
-  const n = S.projects.filter(p => p.category === old).length;
-  if (!confirm(`Usunąć kategorię „${old}”?` + (n ? `\n${n} ${plural(n, 'projekt straci', 'projekty stracą', 'projektów straci')} kategorię (pliki zostają).` : ''))) return;
+  const old = catEdit.old, parent = parentOf(old);
+  const n = S.projects.filter(p => inCat(p.category, old)).length;
+  const subs = allCats().filter(c => c.name !== old && inCat(c.name, old)).length;
+  let msg = `Usunąć kategorię „${catLabel(old)}”` +
+    (subs ? ` razem z ${subs} ${plural(subs, 'podkategorią', 'podkategoriami', 'podkategoriami')}?` : '?');
+  if (n) msg += `\n${n} ${plural(n, 'projekt', 'projekty', 'projektów')} ` +
+    (parent ? `${plural(n, 'trafi', 'trafią', 'trafi')} do „${catLabel(parent)}”` : plural(n, 'straci kategorię', 'stracą kategorię', 'straci kategorię')) +
+    ' (pliki zostają).';
+  if (!confirm(msg)) return;
   $('catdlg').close();
   try {
     await api('/api/categories/rename', { old, new: '' });
-    if (S.f.view === 'cat:' + old) S.f.view = 'all';
+    movedCat(old, '');
     await load(true);
-    toast(`Usunięto kategorię „${old}”`);
+    toast(`Usunięto kategorię „${catLabel(old)}”`);
   } catch (err) { toast(err.message, true); }
 });
 
@@ -1246,6 +1384,7 @@ function renderAll() {
 Object.assign(S.f, store.get('filter', {}));
 if (!['name', 'date', 'cloud', 'category', 'size'].includes(S.f.sort)) S.f.sort = 'name';
 $('sort').value = S.f.sort;
+S.collapsed = new Set(store.get('collapsed', []));
 S.tile = store.get('tile', 190);
 $('tile').value = S.tile;
 document.documentElement.style.setProperty('--tile', S.tile + 'px');

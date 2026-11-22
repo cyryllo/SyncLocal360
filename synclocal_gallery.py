@@ -12,11 +12,13 @@ i pozwala przypisywać im kategorie, etykiety, notatki i gwiazdki.
 
 Dane:
   * <projekt>/config.json:
-      tag       - kategoria (pole z NoCloud2; "unassigned" = brak kategorii)
+      tag       - kategoria (pole z NoCloud2; "unassigned" = brak kategorii);
+                  podkategorie oddziela "/", np. "Meble/Krzesła"
       tags      - lista etykiet
       note      - notatka
       favorite  - ulubiony (bool)
-  * <folder kopii>/synclocal_gallery.json - lista kategorii (nazwa, kolor, kolejność)
+  * <folder kopii>/synclocal_gallery.json - lista kategorii (nazwa, kolor, kolejność);
+    nazwa podkategorii to pełna ścieżka ("Meble/Krzesła"), kategoria nadrzędna jest zawsze na liście
 
 Uruchamianie:
   * w Fusion: przycisk „Galeria” (start_in_fusion); wtedy działa też
@@ -42,6 +44,7 @@ HTML_PATH = os.path.join(ADDIN_PATH, 'resources', 'gallery', 'index.html')
 SETTINGS_PATH = os.path.join(ADDIN_PATH, 'synclocal_settings.json')
 CATEGORIES_FILE = 'synclocal_gallery.json'
 NO_CATEGORY = 'unassigned'
+CAT_SEP = '/'
 DEFAULT_PORT = 8360
 FUSION_EVENT_ID = 'SyncLocal360_GalleryEvent'
 
@@ -78,9 +81,20 @@ def _project_dir(vault, folder):
     return path
 
 
+def clean_category(name):
+    """' Meble / Krzesła ' -> 'Meble/Krzesła' (podkategorie oddziela '/')."""
+    parts = (p.strip() for p in str(name or '').split(CAT_SEP))
+    name = CAT_SEP.join(p for p in parts if p)
+    return '' if name == NO_CATEGORY else name
+
+
+def _in_subtree(cat, root):
+    """Czy kategoria cat to root albo jedna z jej podkategorii."""
+    return cat == root or cat.startswith(root + CAT_SEP)
+
+
 def _category_of(meta):
-    tag = str(meta.get('tag') or '').strip()
-    return '' if tag == NO_CATEGORY else tag
+    return clean_category(meta.get('tag'))
 
 
 def _clean_tags(tags):
@@ -147,22 +161,29 @@ def scan_projects(vault):
     return items
 
 
+def _clean_categories(categories):
+    """Bez duplikatów; brakujące kategorie nadrzędne są dopisywane na końcu listy."""
+    colors = {}                       # nazwa -> kolor, w kolejności z listy
+    for c in categories or []:
+        if not isinstance(c, dict):
+            continue
+        name = clean_category(c.get('name'))
+        if name and not colors.get(name):
+            colors[name] = str(c.get('color') or '')
+    for name in list(colors):
+        parts = name.split(CAT_SEP)
+        for i in range(1, len(parts)):
+            colors.setdefault(CAT_SEP.join(parts[:i]), '')
+    return [{'name': n, 'color': c} for n, c in colors.items()]
+
+
 def load_categories(vault):
     data = _read_json(os.path.join(vault, CATEGORIES_FILE))
-    result = []
-    for c in data.get('categories') or []:
-        name = str(c.get('name') or '').strip() if isinstance(c, dict) else ''
-        if name and name != NO_CATEGORY and all(r['name'] != name for r in result):
-            result.append({'name': name, 'color': str(c.get('color') or '')})
-    return result
+    return _clean_categories(data.get('categories'))
 
 
 def save_categories(vault, categories):
-    clean = []
-    for c in categories or []:
-        name = str(c.get('name') or '').strip()
-        if name and name != NO_CATEGORY and all(r['name'] != name for r in clean):
-            clean.append({'name': name, 'color': str(c.get('color') or '')})
+    clean = _clean_categories(categories)
     path = os.path.join(vault, CATEGORIES_FILE)
     data = _read_json(path)
     data['categories'] = clean
@@ -183,7 +204,7 @@ def update_projects(vault, folders, changes):
         if not isinstance(meta, dict):
             raise ValueError(f'Nie da się odczytać config.json w „{folder}”.')
         if 'category' in changes:
-            meta['tag'] = str(changes['category'] or '').strip() or NO_CATEGORY
+            meta['tag'] = clean_category(changes['category']) or NO_CATEGORY
         if 'tags' in changes:
             meta['tags'] = _clean_tags(changes['tags'])
         if changes.get('add_tags') or changes.get('remove_tags'):
@@ -200,30 +221,45 @@ def update_projects(vault, folders, changes):
 
 
 def rename_category(vault, old, new):
-    """Zmienia nazwę kategorii we wszystkich projektach; new == '' usuwa kategorię."""
-    old = str(old or '').strip()
-    new = str(new or '').strip()
+    """Zmienia nazwę (albo miejsce w drzewie) kategorii razem z jej podkategoriami.
+
+    new == '' usuwa kategorię i jej podkategorie; ich projekty trafiają do kategorii
+    nadrzędnej (dla kategorii głównej: bez kategorii). Gdy new już istnieje, kategorie są łączone.
+    """
+    old = clean_category(old)
+    new = clean_category(new)
     if not old:
         raise ValueError('Brak nazwy kategorii.')
+    if new != old and new and _in_subtree(new, old):
+        raise ValueError('Kategorii nie można przenieść do jej własnej podkategorii.')
+    parent = old.rpartition(CAT_SEP)[0]
+
+    def target(cat):
+        return new + cat[len(old):] if new else parent
+
     changed = 0
     for entry in os.listdir(vault):
         config_path = os.path.join(vault, entry, 'config.json')
         if not os.path.isfile(config_path):
             continue
         meta = _read_json(config_path, default=None)
-        if isinstance(meta, dict) and _category_of(meta) == old:
-            meta['tag'] = new or NO_CATEGORY
+        if not isinstance(meta, dict):
+            continue
+        cat = _category_of(meta)
+        if cat and _in_subtree(cat, old):
+            meta['tag'] = target(cat) or NO_CATEGORY
             _write_json(config_path, meta)
             changed += 1
     cats = load_categories(vault)
-    if new and any(c['name'] == new for c in cats):
-        cats = [c for c in cats if c['name'] != old]          # scalenie z istniejącą
-    else:
-        for c in cats:
-            if c['name'] == old:
-                c['name'] = new
-        cats = [c for c in cats if c['name']]
-    save_categories(vault, cats)
+    keep = {c['name'] for c in cats if not _in_subtree(c['name'], old)}
+    out = []
+    for c in cats:
+        if _in_subtree(c['name'], old):
+            if not new or target(c['name']) in keep:   # usunięcie albo scalenie z istniejącą
+                continue
+            c = dict(c, name=target(c['name']))
+        out.append(c)
+    save_categories(vault, out)
     return changed
 
 
@@ -360,7 +396,7 @@ class _Handler(BaseHTTPRequestHandler):
                 folders = data.get('folders') or []
                 changes = {k: data[k] for k in ('category', 'tags', 'note', 'favorite',
                                                  'add_tags', 'remove_tags') if k in data}
-                cat = str(changes.get('category') or '').strip()
+                cat = clean_category(changes.get('category'))
                 with _write_lock:
                     items = update_projects(vault, folders, changes)
                     if cat and all(c['name'] != cat for c in load_categories(vault)):

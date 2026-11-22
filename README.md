@@ -154,12 +154,17 @@ Samodzielna aplikacja – nie potrzebuje Fusion ani przeglądarki.
 
 1. Pobierz `SyncLocal360-Galeria-<wersja>-x86_64.AppImage` z [Releases](../../releases).
 2. `chmod +x SyncLocal360*.AppImage` i uruchom (albo „Właściwości → Uprawnienia → Wykonywanie”).
+   Po pierwszym uruchomieniu galeria jest w **menu programów** (Grafika, „SyncLocal360 Galeria”).
+   Po pobraniu nowszej wersji wystarczy ją raz uruchomić, a wpis w menu wskaże nowy plik.
 3. Kliknij **Folder…** i wskaż folder z kopiami.
 
 Co potrafi:
 
 - **Szukanie** po nazwie, folderze w chmurze, etykietach i notatkach (klawisz `/`).
-- **Kategorie** z kolorami, **etykiety**, **notatki**, **ulubione**.
+- **Kategorie** z kolorami i **podkategoriami** (dowolnie głęboko, np. Meble › Krzesła),
+  **etykiety**, **notatki**, **ulubione**. Podkategorię dodasz przyciskiem **+** przy kategorii
+  (po najechaniu myszą), a w oknie edycji możesz przenieść kategorię pod inną. Kliknięcie
+  kategorii pokazuje też projekty z jej podkategorii.
 - **Porządkowanie wielu projektów naraz**: Ctrl/Shift+klik, potem klawisz **1–9**
   przypisuje kategorię, **0** ją usuwa – albo przeciągnij projekty na kategorię.
 
@@ -202,7 +207,7 @@ Zwykłe pliki i foldery – nic nie jest zamknięte w bazie danych:
 
 ```
 <folder kopii>/
-  synclocal_gallery.json        lista kategorii (nazwy i kolory)
+  synclocal_gallery.json        lista kategorii (nazwy i kolory; podkategoria to np. „Meble/Krzesła”)
   backup_log_<data>.txt         logi kopii
   <Nazwa projektu>/
     <Nazwa>.f3d                 archiwum Fusion (pełny projekt z historią)

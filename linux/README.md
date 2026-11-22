@@ -4,11 +4,15 @@ Samodzielna aplikacja (AppImage) do przeglądania i porządkowania lokalnych kop
 projektów zrobionych dodatkiem SyncLocal360. Nie potrzebuje Fusion.
 
 - wybór folderu z kopiami (pamięta ostatnio używane),
-- kategorie, etykiety, notatki, ulubione – zapisywane w tych samych plikach co galeria
+- kategorie (z podkategoriami), etykiety, notatki, ulubione – zapisywane w tych samych plikach co galeria
   w Fusion (`config.json` projektu, `synclocal_gallery.json`), więc obie strony widzą to samo
   przez Nextcloud,
 - otwieranie `.step` / `.f3d` w wybranych programach (np. MitCad, FreeCAD) albo w programie
-  domyślnym systemu; podwójne kliknięcie miniatury otwiera projekt programem od dwukliku.
+  domyślnym systemu; podwójne kliknięcie miniatury otwiera projekt programem od dwukliku,
+- uruchomiona z AppImage dodaje się do menu programów: `~/.local/share/applications/synclocal360-galeria.desktop`
+  i ikony `~/.local/share/icons/hicolor/*/apps/synclocal360-galeria.png`. Przy każdym starcie wpis
+  jest odświeżany (po aktualizacji wskazuje nowy plik AppImage). Nie robi tego, gdy ten sam plik
+  zintegrowało już inne narzędzie (np. AppImageLauncher). Usunięcie z menu: skasuj te pliki.
 
 Interfejs to ten sam plik co w dodatku: `../resources/gallery/index.html`.
 

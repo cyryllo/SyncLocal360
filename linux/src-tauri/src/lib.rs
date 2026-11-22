@@ -9,6 +9,7 @@
 //! tutaj z komendami Tauri poniżej. Format danych jest ten sam:
 //!   * `<projekt>/config.json`: `tag` (kategoria, "unassigned" = brak), `tags`, `note`, `favorite`,
 //!   * `<folder kopii>/synclocal_gallery.json`: lista kategorii (nazwa, kolor).
+//! Podkategorie oddziela `/` w nazwie (`Meble/Krzesła`), jak w `synclocal_gallery.py`.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -21,6 +22,7 @@ use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 const NO_CATEGORY: &str = "unassigned";
+const CAT_SEP: char = '/';
 const CATEGORIES_FILE: &str = "synclocal_gallery.json";
 const MAX_RECENT: usize = 8;
 
@@ -277,9 +279,20 @@ fn str_of(v: Option<&Value>) -> String {
     }
 }
 
+/// `" Meble / Krzesła "` -> `"Meble/Krzesła"` (podkategorie oddziela `/`).
+fn clean_category(name: &str) -> String {
+    let name = name.split(CAT_SEP).map(str::trim).filter(|p| !p.is_empty())
+        .collect::<Vec<_>>().join("/");
+    if name == NO_CATEGORY { String::new() } else { name }
+}
+
+/// Czy `cat` to `root` albo jedna z jej podkategorii.
+fn in_subtree(cat: &str, root: &str) -> bool {
+    cat == root || (cat.starts_with(root) && cat[root.len()..].starts_with(CAT_SEP))
+}
+
 fn category_of(meta: &Value) -> String {
-    let tag = str_of(meta.get("tag")).trim().to_string();
-    if tag == NO_CATEGORY { String::new() } else { tag }
+    clean_category(&str_of(meta.get("tag")))
 }
 
 fn clean_tags(v: Option<&Value>) -> Vec<String> {
@@ -363,18 +376,30 @@ fn scan_projects(vault: &Path) -> Vec<Value> {
         .collect()
 }
 
+/// Bez duplikatów; brakujące kategorie nadrzędne są dopisywane na końcu listy.
 fn clean_categories(list: Option<&Value>) -> Vec<Value> {
-    let mut out: Vec<Value> = Vec::new();
+    let mut cats: Vec<(String, String)> = Vec::new();   // (nazwa, kolor) w kolejności z listy
     if let Some(Value::Array(items)) = list {
         for c in items {
-            let name = str_of(c.get("name")).trim().to_string();
-            if name.is_empty() || name == NO_CATEGORY || out.iter().any(|o| o["name"] == name.as_str()) {
-                continue;
+            let name = clean_category(&str_of(c.get("name")));
+            if name.is_empty() { continue; }
+            let color = str_of(c.get("color"));
+            match cats.iter_mut().find(|(n, _)| *n == name) {
+                Some(found) => if found.1.is_empty() { found.1 = color },
+                None => cats.push((name, color)),
             }
-            out.push(json!({ "name": name, "color": str_of(c.get("color")) }));
         }
     }
-    out
+    for k in 0..cats.len() {
+        let parts: Vec<String> = cats[k].0.split(CAT_SEP).map(String::from).collect();
+        for i in 1..parts.len() {
+            let parent = parts[..i].join("/");
+            if !cats.iter().any(|(n, _)| *n == parent) {
+                cats.push((parent, String::new()));
+            }
+        }
+    }
+    cats.into_iter().map(|(name, color)| json!({ "name": name, "color": color })).collect()
 }
 
 fn load_categories(vault: &Path) -> Vec<Value> {
@@ -401,7 +426,7 @@ fn update_projects(vault: &Path, folders: &[String], ch: &Map<String, Value>) ->
         let mut meta = read_json(&cfg).filter(|v| v.is_object())
             .ok_or_else(|| format!("Nie da się odczytać config.json w „{folder}”."))?;
         if let Some(c) = ch.get("category") {
-            let c = str_of(Some(c)).trim().to_string();
+            let c = clean_category(&str_of(Some(c)));
             meta["tag"] = Value::String(if c.is_empty() { NO_CATEGORY.into() } else { c });
         }
         if let Some(t) = ch.get("tags") {
@@ -429,34 +454,149 @@ fn update_projects(vault: &Path, folders: &[String], ch: &Map<String, Value>) ->
     Ok(updated)
 }
 
-/// Zmienia nazwę kategorii we wszystkich projektach; pusta nowa nazwa usuwa kategorię.
+/// Zmienia nazwę (albo miejsce w drzewie) kategorii razem z jej podkategoriami.
+/// Pusta nowa nazwa usuwa kategorię i jej podkategorie; ich projekty trafiają do kategorii
+/// nadrzędnej (dla kategorii głównej: bez kategorii). Gdy nowa już istnieje, kategorie są łączone.
 fn rename_category(vault: &Path, old: &str, new: &str) -> Result<usize, String> {
-    let (old, new) = (old.trim(), new.trim());
+    let (old, new) = (clean_category(old), clean_category(new));
     if old.is_empty() {
         return Err("Brak nazwy kategorii.".into());
     }
+    if new != old && !new.is_empty() && in_subtree(&new, &old) {
+        return Err("Kategorii nie można przenieść do jej własnej podkategorii.".into());
+    }
+    let parent = old.rsplit_once(CAT_SEP).map(|(p, _)| p.to_string()).unwrap_or_default();
+    let target = |cat: &str| -> String {
+        if new.is_empty() { parent.clone() } else { format!("{}{}", new, &cat[old.len()..]) }
+    };
     let mut changed = 0;
     for e in fs::read_dir(vault).map_err(|e| e.to_string())?.filter_map(|e| e.ok()) {
         let cfg = e.path().join("config.json");
         if !cfg.is_file() { continue; }
         let Some(mut meta) = read_json(&cfg).filter(|v| v.is_object()) else { continue };
-        if category_of(&meta) == old {
-            meta["tag"] = Value::String(if new.is_empty() { NO_CATEGORY.into() } else { new.into() });
+        let cat = category_of(&meta);
+        if !cat.is_empty() && in_subtree(&cat, &old) {
+            let t = target(&cat);
+            meta["tag"] = Value::String(if t.is_empty() { NO_CATEGORY.into() } else { t });
             write_json(&cfg, &meta)?;
             changed += 1;
         }
     }
-    let mut cats = load_categories(vault);
-    if !new.is_empty() && cats.iter().any(|c| c["name"] == new) {
-        cats.retain(|c| c["name"] != old);                  // scalenie z istniejącą
-    } else {
-        for c in cats.iter_mut() {
-            if c["name"] == old { c["name"] = Value::String(new.into()); }
+    let cats = load_categories(vault);
+    let keep: Vec<String> = cats.iter().map(|c| str_of(c.get("name")))
+        .filter(|n| !in_subtree(n, &old)).collect();
+    let mut out = Vec::new();
+    for mut c in cats {
+        let name = str_of(c.get("name"));
+        if in_subtree(&name, &old) {
+            let t = target(&name);
+            if new.is_empty() || keep.contains(&t) { continue; }   // usunięcie albo scalenie
+            c["name"] = Value::String(t);
         }
-        cats.retain(|c| !str_of(c.get("name")).is_empty());
+        out.push(c);
     }
-    save_categories(vault, &Value::Array(cats))?;
+    save_categories(vault, &Value::Array(out))?;
     Ok(changed)
+}
+
+// ---------------------------------------------------------------------------
+// WPIS W MENU PROGRAMÓW
+// ---------------------------------------------------------------------------
+/// Nazwa pliku .desktop i ikony. Taka sama jak nazwa programu, bo pod nią okno zgłasza się
+/// systemowi (WM_CLASS w X11, app_id w Waylandzie) - wtedy pasek zadań łączy okno z wpisem.
+const DESKTOP_NAME: &str = "synclocal360-galeria";
+const DESKTOP_MARK: &str = "X-SyncLocal360-Generated=true";
+const MENU_ICONS: [(&str, &[u8]); 4] = [
+    ("32x32", include_bytes!("../icons/32x32.png")),
+    ("128x128", include_bytes!("../icons/128x128.png")),
+    ("256x256", include_bytes!("../icons/128x128@2x.png")),
+    ("512x512", include_bytes!("../icons/icon.png")),
+];
+
+fn data_home() -> PathBuf {
+    std::env::var_os("XDG_DATA_HOME").map(PathBuf::from).filter(|p| p.is_absolute())
+        .unwrap_or_else(|| home_dir().join(".local/share"))
+}
+
+/// Ścieżka jako argument w Exec= (specyfikacja Desktop Entry: cudzysłów, \" \` \$ \\, %% ,
+/// a potem jeszcze ogólne podwojenie ukośników wstecznych w wartościach tekstowych).
+fn desktop_exec_arg(path: &str) -> String {
+    let mut quoted = String::from("\"");
+    for ch in path.chars() {
+        match ch {
+            '"' | '`' | '$' | '\\' => { quoted.push('\\'); quoted.push(ch); }
+            '%' => quoted.push_str("%%"),
+            _ => quoted.push(ch),
+        }
+    }
+    quoted.push('"');
+    quoted.replace('\\', "\\\\")
+}
+
+fn desktop_entry(appimage: &str) -> String {
+    let exec = desktop_exec_arg(appimage);
+    format!("[Desktop Entry]
+Type=Application
+Name=SyncLocal360 Galeria
+GenericName=Galeria projektów CAD
+Comment=Przeglądanie i porządkowanie lokalnych kopii projektów Fusion
+Comment[en]=Browse and organize local copies of Fusion projects
+Exec={exec} %f
+TryExec={try_exec}
+Icon={DESKTOP_NAME}
+StartupWMClass={DESKTOP_NAME}
+Terminal=false
+Categories=Graphics;3DGraphics;Engineering;
+Keywords=CAD;Fusion;STEP;f3d;galeria;kopia;backup;
+{DESKTOP_MARK}
+", try_exec = appimage.replace('\\', "\\\\"))
+}
+
+/// Uruchomiona z AppImage galeria dopisuje się do menu programów
+/// (~/.local/share/applications + ikony w ~/.local/share/icons/hicolor). Przy każdym starcie
+/// wpis jest aktualizowany, więc po pobraniu nowej wersji wskazuje nowy plik AppImage.
+/// Pomija to, gdy ten sam plik AppImage zintegrowało już inne narzędzie (np. AppImageLauncher).
+fn install_menu_entry(appimage: Option<PathBuf>, data: &Path) -> Result<bool, String> {
+    let Some(appimage) = appimage.filter(|p| p.is_file()) else {
+        return Ok(false);
+    };
+    let appimage = appimage.to_string_lossy().to_string();
+    let apps = data.join("applications");
+    let target = apps.join(format!("{DESKTOP_NAME}.desktop"));
+    if let Ok(entries) = fs::read_dir(&apps) {
+        for e in entries.filter_map(|e| e.ok()) {
+            let p = e.path();
+            if p == target || p.extension().map_or(true, |x| x != "desktop") { continue; }
+            if fs::read_to_string(&p).is_ok_and(|t| t.lines().any(|l| l.starts_with("Exec=") && l.contains(&appimage))) {
+                return Ok(false);
+            }
+        }
+    }
+    let content = desktop_entry(&appimage);
+    if fs::read_to_string(&target).is_ok_and(|old| old == content) {
+        return Ok(false);
+    }
+    for (size, png) in MENU_ICONS {
+        let dir = data.join("icons/hicolor").join(size).join("apps");
+        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        fs::write(dir.join(format!("{DESKTOP_NAME}.png")), png).map_err(|e| e.to_string())?;
+    }
+    fs::create_dir_all(&apps).map_err(|e| e.to_string())?;
+    let tmp = target.with_extension("desktop.tmp");
+    fs::write(&tmp, content).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &target).map_err(|e| e.to_string())?;
+    // Odświeżenie menu (KDE i GNOME zwykle widzą zmianę same; brak narzędzi to nie błąd).
+    for (prog, args) in [("update-desktop-database", vec![apps.to_string_lossy().to_string()]),
+                         ("kbuildsycoca6", vec![]), ("kbuildsycoca5", vec![])] {
+        if on_path(prog) {
+            let mut cmd = Command::new(prog);
+            cmd.args(&args).stdout(Stdio::null()).stderr(Stdio::null());
+            clean_env(&mut cmd);
+            let _ = cmd.spawn();
+            if prog.starts_with("kbuildsycoca") { break; }
+        }
+    }
+    Ok(true)
 }
 
 // ---------------------------------------------------------------------------
@@ -634,7 +774,7 @@ fn update_projects_cmd(state: State<AppState>, args: Value) -> Res {
     let changes = args.as_object().cloned().unwrap_or_default();
     let _g = state.write_lock.lock().unwrap();
     let items = update_projects(&vault, &folders, &changes)?;
-    let cat = arg_str(&args, "category").trim().to_string();
+    let cat = clean_category(&arg_str(&args, "category"));
     if args.get("category").is_some() && !cat.is_empty() {
         let mut cats = load_categories(&vault);
         if !cats.iter().any(|c| c["name"] == cat.as_str()) {
@@ -779,6 +919,9 @@ pub fn run() {
                 .and_then(|v| serde_json::from_value(v).ok())
                 .unwrap_or_default();
             add_detected_apps(&mut settings);
+            if let Err(e) = install_menu_entry(std::env::var_os("APPIMAGE").map(PathBuf::from), &data_home()) {
+                eprintln!("Nie udało się dodać galerii do menu programów: {e}");
+            }
             let state = AppState { settings: Mutex::new(settings), settings_path, write_lock: Mutex::new(()) };
             // Folder podany w wierszu poleceń ma pierwszeństwo.
             if let Some(arg) = std::env::args().nth(1).filter(|a| Path::new(a).is_dir()) {
@@ -818,6 +961,103 @@ mod tests {
         let ok = Command::new("python3").args(["-m", "py_compile"]).arg(&m).status().unwrap().success();
         let _ = fs::remove_file(&m);
         assert!(ok, "makro nie kompiluje się w Pythonie");
+    }
+}
+
+#[cfg(test)]
+mod category_tests {
+    use super::*;
+
+    fn vault_with(cats: &[&str], projects: &[(&str, &str)]) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("sl360_cat_{}_{}", std::process::id(),
+            std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir_all(&dir).unwrap();
+        let list: Vec<Value> = cats.iter().map(|c| json!({ "name": c, "color": "#111111" })).collect();
+        save_categories(&dir, &Value::Array(list)).unwrap();
+        for (folder, tag) in projects {
+            fs::create_dir_all(dir.join(folder)).unwrap();
+            write_json(&dir.join(folder).join("config.json"), &json!({ "tag": tag })).unwrap();
+        }
+        dir
+    }
+    fn tag(dir: &Path, folder: &str) -> String {
+        str_of(read_json(&dir.join(folder).join("config.json")).unwrap().get("tag"))
+    }
+    fn names(dir: &Path) -> Vec<String> {
+        load_categories(dir).iter().map(|c| str_of(c.get("name"))).collect()
+    }
+
+    #[test]
+    fn clean_names_and_parents() {
+        assert_eq!(clean_category(" Meble / Krzesła /"), "Meble/Krzesła");
+        assert_eq!(clean_category("unassigned"), "");
+        assert!(in_subtree("Meble/Krzesła", "Meble"));
+        assert!(!in_subtree("Meblościanki", "Meble"));
+        let c = clean_categories(Some(&json!([
+            { "name": "A/B/C" }, { "name": "A", "color": "#1" }, { "name": "A/B/C", "color": "#2" }])));
+        assert_eq!(c, vec![json!({ "name": "A/B/C", "color": "#2" }), json!({ "name": "A", "color": "#1" }),
+            json!({ "name": "A/B", "color": "" })]);
+    }
+
+    #[test]
+    fn rename_moves_subtree_and_delete_goes_to_parent() {
+        let d = vault_with(&["Meble", "Meble/Krzesła", "Meble/Krzesła/Biurowe", "CNC"],
+            &[("a", "Meble"), ("b", "Meble/Krzesła"), ("c", "Meble/Krzesła/Biurowe"), ("e", "Meblościanki")]);
+        assert_eq!(rename_category(&d, "Meble", "Dom/Meble").unwrap(), 3);
+        assert_eq!(tag(&d, "c"), "Dom/Meble/Krzesła/Biurowe");
+        assert_eq!(tag(&d, "e"), "Meblościanki");
+        assert_eq!(names(&d), ["Dom/Meble", "Dom/Meble/Krzesła", "Dom/Meble/Krzesła/Biurowe", "CNC", "Dom"]);
+        assert!(rename_category(&d, "Dom", "Dom/X").is_err());
+        assert_eq!(rename_category(&d, "Dom/Meble/Krzesła", "").unwrap(), 2);
+        assert_eq!(tag(&d, "b"), "Dom/Meble");
+        assert_eq!(tag(&d, "c"), "Dom/Meble");
+        assert_eq!(names(&d), ["Dom/Meble", "CNC", "Dom"]);
+        // przeniesienie pod kategorię z dalszej części listy nie gubi jej koloru
+        assert_eq!(rename_category(&d, "Dom/Meble", "CNC/Meble").unwrap(), 3);
+        let cnc = load_categories(&d).into_iter().find(|c| c["name"] == "CNC").unwrap();
+        assert_eq!(cnc["color"], "#111111");
+        assert_eq!(rename_category(&d, "CNC", "").unwrap(), 3);
+        assert_eq!(tag(&d, "a"), NO_CATEGORY);
+        assert_eq!(names(&d), ["Dom"]);
+        let _ = fs::remove_dir_all(&d);
+    }
+}
+
+#[cfg(test)]
+mod menu_tests {
+    use super::*;
+
+    #[test]
+    fn exec_quoting() {
+        assert_eq!(desktop_exec_arg("/home/a/Pulpit/Galeria 1.0.AppImage"), "\"/home/a/Pulpit/Galeria 1.0.AppImage\"");
+        assert_eq!(desktop_exec_arg("/x/100%$a\"b.AppImage"), r#""/x/100%%\\$a\\"b.AppImage""#);
+        let d = desktop_entry("/home/a/Pulpit/SyncLocal360-Galeria-1.0.2-x86_64.AppImage");
+        assert!(d.contains("Exec=\"/home/a/Pulpit/SyncLocal360-Galeria-1.0.2-x86_64.AppImage\" %f\n"));
+        assert!(d.contains("TryExec=/home/a/Pulpit/SyncLocal360-Galeria-1.0.2-x86_64.AppImage\n"));
+    }
+
+    #[test]
+    fn installs_and_updates_entry() {
+        let dir = std::env::temp_dir().join(format!("sl360_menu_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let data = dir.join("share");
+        let (v1, v2) = (dir.join("Galeria-1.0.1.AppImage"), dir.join("Galeria-1.0.2.AppImage"));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(&v1, b"").unwrap();
+        fs::write(&v2, b"").unwrap();
+        let entry = data.join("applications/synclocal360-galeria.desktop");
+        assert!(!install_menu_entry(None, &data).unwrap());
+        assert!(install_menu_entry(Some(v1.clone()), &data).unwrap());
+        assert!(fs::read_to_string(&entry).unwrap().contains("Galeria-1.0.1.AppImage"));
+        assert!(data.join("icons/hicolor/256x256/apps/synclocal360-galeria.png").is_file());
+        assert!(!install_menu_entry(Some(v1.clone()), &data).unwrap());          // bez zmian
+        assert!(install_menu_entry(Some(v2.clone()), &data).unwrap());           // nowa wersja
+        assert!(fs::read_to_string(&entry).unwrap().contains("Galeria-1.0.2.AppImage"));
+        // ten sam plik zintegrowany już przez inne narzędzie: nie dubluj
+        fs::write(data.join("applications/appimagekit_x.desktop"),
+            format!("[Desktop Entry]\nExec={} %U\n", v1.display())).unwrap();
+        assert!(!install_menu_entry(Some(v1), &data).unwrap());
+        let _ = fs::remove_dir_all(&dir);
     }
 }
 
