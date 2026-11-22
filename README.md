@@ -168,9 +168,14 @@ Co potrafi:
 
   | Program | Polecenie |
   |---|---|
+  | MitCad (AppImage, otwiera też `.f3d`) | `~/Pulpit/Mitcad-0.70.0-x86_64.AppImage %f` |
   | FreeCAD (Flatpak) | `flatpak run org.freecad.FreeCAD %f` |
   | FreeCAD (pakiet) | `freecad %f` |
   | Dowolny AppImage | `~/Aplikacje/Program.AppImage %f` |
+
+  MitCad i FreeCAD galeria znajduje i dopisuje sama. MitCad otwiera pliki `.f3d` z historią
+  projektu, więc po dwukliku dostaje `.f3d` (inne programy dostają `.step`). Gdy AppImage
+  zaktualizujesz do nowszej wersji, galeria sama znajdzie nowy plik w tym samym folderze.
 
   FreeCAD otwierany z wiersza poleceń nie dopasowuje widoku do modelu (modele z Fusion bywają
   niewidoczne albo mocno przybliżone). Galeria sama to naprawia: przekazuje mu małe makro,

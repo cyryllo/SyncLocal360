@@ -37,6 +37,10 @@ struct Settings {
     apps: Vec<AppEntry>,
     #[serde(default)]
     apps_initialized: bool,
+    /// Nazwy programów, które aplikacja już raz sama dopisała. Program usunięty
+    /// przez użytkownika nie wraca, a nowo obsługiwany (np. MitCad) dochodzi do listy.
+    #[serde(default)]
+    apps_offered: Vec<String>,
     /// Program na dwuklik: indeks w `apps`, -1 = program domyślny systemu,
     /// brak = pierwszy program pasujący do rozszerzenia.
     #[serde(default)]
@@ -100,34 +104,132 @@ fn on_path(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Przy pierwszym uruchomieniu dopisuje znalezione programy CAD.
+fn home_dir() -> PathBuf {
+    PathBuf::from(std::env::var("HOME").unwrap_or_default())
+}
+
+/// Wersja z nazwy pliku AppImage, np. `Mitcad-0.70.0-x86_64.AppImage` -> [0, 70, 0].
+fn appimage_version(name: &str) -> Vec<u64> {
+    name.split(|c: char| c == '-' || c == '_')
+        .find(|part| part.starts_with(|c: char| c.is_ascii_digit()) && part.contains('.'))
+        .map(|v| v.split('.').map(|n| n.parse().unwrap_or(0)).collect())
+        .unwrap_or_default()
+}
+
+/// Najnowszy plik `<prefiks>*.AppImage` w katalogu (bez rozróżniania wielkości liter).
+fn newest_appimage(dir: &Path, prefix: &str) -> Option<PathBuf> {
+    let prefix = prefix.to_lowercase();
+    fs::read_dir(dir).ok()?
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            let lower = name.to_lowercase();
+            if !lower.starts_with(&prefix) || !lower.ends_with(".appimage") || !e.path().is_file() {
+                return None;
+            }
+            let mtime = e.metadata().ok()?.modified().ok()?;
+            Some((appimage_version(&name), mtime, e.path()))
+        })
+        .max_by(|a, b| (&a.0, a.1).cmp(&(&b.0, b.1)))
+        .map(|(_, _, p)| p)
+}
+
+/// Katalogi, w których ludzie zwykle trzymają pliki AppImage.
+fn appimage_dirs() -> Vec<PathBuf> {
+    let home = home_dir();
+    ["Pulpit", "Desktop", "Aplikacje", "Applications", "Programy", ".local/bin", "bin",
+     "Pobrane", "Downloads"]
+        .iter().map(|d| home.join(d)).filter(|d| d.is_dir()).collect()
+}
+
+/// Polecenie z wersją w nazwie AppImage przestaje działać po aktualizacji programu
+/// (`Mitcad-0.70.0-….AppImage` -> `Mitcad-0.71.0-….AppImage`). Gdy pliku nie ma,
+/// szukamy najnowszego AppImage o tym samym początku nazwy w tym samym katalogu.
+fn resolve_appimage(program: &str) -> Option<String> {
+    let path = Path::new(program);
+    let name = path.file_name()?.to_string_lossy().to_string();
+    if path.exists() || !path.is_absolute() || !name.to_lowercase().ends_with(".appimage") {
+        return None;
+    }
+    let stem = &name[..name.len() - ".appimage".len()];
+    let prefix = stem.split(|c: char| c == '-' || c == '_' || c == '.').next().unwrap_or(stem);
+    if prefix.is_empty() {
+        return None;
+    }
+    newest_appimage(path.parent()?, prefix).map(|p| p.to_string_lossy().to_string())
+}
+
+/// Polecenie w cudzysłowie, jeśli ścieżka ma spacje itp.
+fn quoted(path: &Path) -> String {
+    shell_words::quote(&path.to_string_lossy()).to_string()
+}
+
+/// Rozszerzenia dla MitCad: otwiera `.f3d` z historią projektu, a do tego STEP i inne.
+const MITCAD_EXTS: [&str; 8] = ["f3d", "f3z", "step", "stp", "iges", "igs", "stl", "3mf"];
+
+/// Programy CAD znalezione w systemie.
 fn detect_apps() -> Vec<AppEntry> {
-    let cad = |name: &str, command: String| AppEntry {
+    let entry = |name: &str, command: String, exts: &[&str]| AppEntry {
         name: name.into(),
         command,
-        exts: ["step", "stp", "iges", "igs", "stl", "obj"].iter().map(|s| s.to_string()).collect(),
+        exts: exts.iter().map(|s| s.to_string()).collect(),
     };
+    let cad_exts = ["step", "stp", "iges", "igs", "stl", "obj"];
     let mut apps = Vec::new();
+
+    // MitCad: polecenie w PATH albo AppImage (np. na pulpicie).
+    if on_path("mitcad") {
+        apps.push(entry("MitCad", "mitcad %f".into(), &MITCAD_EXTS));
+    } else if let Some(p) = appimage_dirs().iter().find_map(|d| newest_appimage(d, "mitcad")) {
+        apps.push(entry("MitCad", format!("{} %f", quoted(&p)), &MITCAD_EXTS));
+    }
+
+    let mut freecad = None;
     for bin in ["freecad", "FreeCAD", "freecad-daily"] {
         if on_path(bin) {
-            apps.push(cad("FreeCAD", format!("{bin} %f")));
+            freecad = Some(format!("{bin} %f"));
             break;
         }
     }
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = home_dir();
     let flatpak_bins = [
         PathBuf::from("/var/lib/flatpak/exports/bin"),
-        PathBuf::from(&home).join(".local/share/flatpak/exports/bin"),
+        home.join(".local/share/flatpak/exports/bin"),
     ];
     let has_flatpak = |id: &str| flatpak_bins.iter().any(|d| d.join(id).exists());
-    if apps.is_empty() && has_flatpak("org.freecad.FreeCAD") {
-        apps.push(cad("FreeCAD", "flatpak run org.freecad.FreeCAD %f".into()));
+    if freecad.is_none() && has_flatpak("org.freecad.FreeCAD") {
+        freecad = Some("flatpak run org.freecad.FreeCAD %f".into());
+    }
+    if let Some(cmd) = freecad {
+        apps.push(entry("FreeCAD", cmd, &cad_exts));
     }
     if on_path("solvespace") {
-        apps.push(AppEntry { name: "SolveSpace".into(), command: "solvespace %f".into(),
-                             exts: vec!["slvs".into()] });
+        apps.push(entry("SolveSpace", "solvespace %f".into(), &["slvs"]));
     }
     apps
+}
+
+/// Dopisuje wykryte programy, których aplikacja jeszcze nie proponowała
+/// i których nie ma już na liście (porównanie po nazwie). Zwraca true, gdy coś dodano.
+fn add_detected_apps(settings: &mut Settings) -> bool {
+    if settings.apps_initialized && settings.apps_offered.is_empty() {
+        // Ustawienia sprzed `apps_offered`: wtedy wykrywano tylko FreeCAD i SolveSpace.
+        settings.apps_offered = vec!["FreeCAD".into(), "SolveSpace".into()];
+    }
+    settings.apps_initialized = true;
+    let mut added = false;
+    for app in detect_apps() {
+        let key = app.name.to_lowercase();
+        if settings.apps_offered.iter().any(|n| n.to_lowercase() == key) {
+            continue;
+        }
+        settings.apps_offered.push(app.name.clone());
+        if !settings.apps.iter().any(|a| a.name.to_lowercase() == key) {
+            settings.apps.push(app);
+            added = true;
+        }
+    }
+    added
 }
 
 // ---------------------------------------------------------------------------
@@ -484,7 +586,10 @@ fn open_with_app(app: &AppEntry, path: &Path) -> Result<(), String> {
     } else {
         parts.push(p);
     }
-    let program = parts.remove(0);
+    let mut program = parts.remove(0);
+    if let Some(newer) = resolve_appimage(&program) {
+        program = newer;
+    }
     spawn_detached(&program, &parts)
 }
 
@@ -673,10 +778,7 @@ pub fn run() {
             let mut settings: Settings = read_json(&settings_path)
                 .and_then(|v| serde_json::from_value(v).ok())
                 .unwrap_or_default();
-            if !settings.apps_initialized {
-                settings.apps = detect_apps();
-                settings.apps_initialized = true;
-            }
+            add_detected_apps(&mut settings);
             let state = AppState { settings: Mutex::new(settings), settings_path, write_lock: Mutex::new(()) };
             // Folder podany w wierszu poleceń ma pierwszeństwo.
             if let Some(arg) = std::env::args().nth(1).filter(|a| Path::new(a).is_dir()) {
@@ -720,7 +822,60 @@ mod tests {
 }
 
 #[cfg(test)]
+mod appimage_tests {
+    use super::*;
+
+    #[test]
+    fn version_from_name() {
+        assert_eq!(appimage_version("Mitcad-0.70.0-x86_64.AppImage"), vec![0, 70, 0]);
+        assert_eq!(appimage_version("solidcraft-0.45.0-linux-x86_64.AppImage"), vec![0, 45, 0]);
+        assert!(appimage_version("solidcraft.AppImage").is_empty());
+    }
+
+    #[test]
+    fn finds_newer_appimage() {
+        let dir = std::env::temp_dir().join(format!("sl360_appimage_{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        for n in ["Mitcad-0.9.0-x86_64.AppImage", "Mitcad-0.70.0-x86_64.AppImage",
+                  "solidcraft-0.45.0-linux-x86_64.AppImage", "Inny-1.0.AppImage"] {
+            fs::write(dir.join(n), b"").unwrap();
+        }
+        let old = dir.join("Mitcad-0.69.0-x86_64.AppImage").to_string_lossy().to_string();
+        let sc = dir.join("solidcraft.AppImage").to_string_lossy().to_string();
+        let mc = resolve_appimage(&old).unwrap();
+        let sc = resolve_appimage(&sc).unwrap();
+        let existing = resolve_appimage(&mc);
+        let _ = fs::remove_dir_all(&dir);
+        assert!(mc.ends_with("Mitcad-0.70.0-x86_64.AppImage"), "{mc}");
+        assert!(sc.ends_with("solidcraft-0.45.0-linux-x86_64.AppImage"), "{sc}");
+        assert!(existing.is_none());
+        assert!(resolve_appimage("mitcad").is_none());
+    }
+
+    #[test]
+    fn detected_apps_added_once() {
+        let mut s = Settings { apps_initialized: true, ..Default::default() };
+        s.apps.push(AppEntry { name: "SolidCraft".into(), command: "x %f".into(), exts: vec![] });
+        add_detected_apps(&mut s);
+        assert!(!s.apps.iter().any(|a| a.name == "FreeCAD"), "FreeCAD był już kiedyś proponowany");
+        let n = s.apps.len();
+        s.apps.retain(|a| a.name != "MitCad");
+        add_detected_apps(&mut s);
+        assert!(s.apps.len() <= n && !s.apps.iter().any(|a| a.name == "MitCad"), "usunięty nie wraca");
+    }
+}
+
+#[cfg(test)]
 mod manual {
+    /// Ręcznie: cargo test -- --ignored --nocapture detect
+    #[test]
+    #[ignore]
+    fn detect() {
+        for a in super::detect_apps() {
+            println!("{} | {} | {:?}", a.name, a.command, a.exts);
+        }
+    }
+
     /// Ręcznie: SL360_FILE=... cargo test -- --ignored --nocapture make_macro
     #[test]
     #[ignore]

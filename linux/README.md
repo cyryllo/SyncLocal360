@@ -7,8 +7,8 @@ projektów zrobionych dodatkiem SyncLocal360. Nie potrzebuje Fusion.
 - kategorie, etykiety, notatki, ulubione – zapisywane w tych samych plikach co galeria
   w Fusion (`config.json` projektu, `synclocal_gallery.json`), więc obie strony widzą to samo
   przez Nextcloud,
-- otwieranie `.step` / `.f3d` w wybranych programach (np. FreeCAD) albo w programie
-  domyślnym systemu; podwójne kliknięcie miniatury otwiera `.step` w pierwszym pasującym programie.
+- otwieranie `.step` / `.f3d` w wybranych programach (np. MitCad, FreeCAD) albo w programie
+  domyślnym systemu; podwójne kliknięcie miniatury otwiera projekt programem od dwukliku.
 
 Interfejs to ten sam plik co w dodatku: `../resources/gallery/index.html`.
 
@@ -60,7 +60,8 @@ Ustawienia (ikona zębatki) → „Programy do otwierania plików”. Każdy pro
 - rozszerzenia (np. `step, stp`); puste = wszystkie pliki.
 
 Kolumna **Dwuklik** wybiera program, którym projekt otwiera się po dwukliku na miniaturze
-(otwierany jest `.step`, a gdy go brak – `.f3d`). Można też wybrać „Program domyślny systemu”.
+(gdy nic nie wybrano – pierwszy na liście). Jeśli ten program ma na liście rozszerzeń `f3d`
+(np. MitCad), dostaje plik `.f3d`, w innym razie `.step`. Można też wybrać „Program domyślny systemu”.
 Jeśli wybrany program nie obsługuje danego pliku, użyty zostanie pierwszy pasujący z listy.
 W panelu projektu przycisk programu od dwukliku jest niebieski.
 
@@ -70,9 +71,17 @@ Makro otwiera plik, nazywa dokument jak plik i ustawia widok izometryczny z „d
 Bez tego FreeCAD zostawia kamerę w punkcie zero z kadrem ok. 4 mm i modele z Fusion są
 niewidoczne albo mocno przybliżone.
 
-Przy pierwszym uruchomieniu aplikacja sama dopisuje FreeCAD, jeśli go znajdzie
-(w `PATH` albo jako Flatpak).
+Aplikacja sama dopisuje znalezione programy (każdy tylko raz – usunięty z listy nie wraca):
 
-Pliki `.f3d` otworzy tylko Fusion – na Linuksie przydają się kopie `.step`
-(opcja „Dodatkowo eksportuj do STEP” w kopii z chmury). STEP to sama geometria,
-bez historii i parametrów z Fusion.
+- **MitCad**: polecenie `mitcad` w `PATH` albo najnowszy `Mitcad-*.AppImage` w `~/Pulpit`,
+  `~/Desktop`, `~/Aplikacje`, `~/Applications`, `~/Programy`, `~/.local/bin`, `~/bin`,
+  `~/Pobrane`, `~/Downloads`; rozszerzenia `f3d, f3z, step, stp, iges, igs, stl, 3mf`,
+- **FreeCAD**: w `PATH` albo jako Flatpak.
+
+**Aktualizacje AppImage:** jeśli polecenie wskazuje na plik `.AppImage`, którego już nie ma
+(np. `Mitcad-0.70.0-x86_64.AppImage` po aktualizacji do 0.71.0), aplikacja uruchamia najnowszy
+plik AppImage z tego samego katalogu o tym samym początku nazwy (`Mitcad…`).
+
+Pliki `.f3d` otwiera Fusion i **MitCad** (z historią projektu, czyli szkicami, operacjami i parametrami).
+Pozostałym programom wystarczą kopie `.step` (opcja „Dodatkowo eksportuj do STEP” w kopii z chmury).
+STEP to sama geometria, bez historii i parametrów z Fusion.

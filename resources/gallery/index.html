@@ -893,11 +893,11 @@ function detailHtml(p) {
   h += `<h3>Notatka</h3><textarea id="note" data-f="${esc(p.folder)}" placeholder="Zapisuje się po wyjściu z pola">${esc(p.note)}</textarea>`;
   const fl = p.files;
   h += '<h3>Pliki</h3><div class="files">';
-  const dblFile = !S.fusion && S.apps ? (fl.step || fl.f3d || {}).name : null;
+  const dt = !S.fusion && S.apps ? dblTarget(fl) : null;
   for (const kind of ['step', 'f3d']) {
     const f = fl[kind];
     if (!f) continue;
-    const dbl = f.name === dblFile ? dblApp(f.name) : undefined;   // undefined = nie ten plik
+    const dbl = dt && f === dt.file ? dt.app : undefined;   // undefined = nie ten plik
     const cls = on => on ? 'btn primary' : 'btn';
     const tip = on => on ? ' (dwuklik na miniaturze)' : '';
     h += `<div class="frow"><div class="fn"><span>.${kind}</span><span>${fmtSize(f.size)}</span></div>`;
@@ -930,15 +930,29 @@ async function openFile(folder, file, appIdx) {
     toast(`Otwieram ${file}…`);
   } catch (e) { toast(e.message, true); }
 }
-// Podwójne kliknięcie: Fusion (jeśli połączony), inaczej .step w pierwszym pasującym programie.
+// Podwójne kliknięcie: Fusion (jeśli połączony), inaczej plik z dblTarget.
 function openDefault(p) {
   if (S.fusion) {
     return api('/api/fusion', { action: 'open', folder: p.folder })
       .then(() => toast('Otwieram w Fusion…'), e => toast(e.message, true));
   }
-  const f = p.files.step || p.files.f3d;
-  if (!f) return toast('Ten projekt nie ma pliku do otwarcia.', true);
-  return openFile(p.folder, f.name, dblApp(f.name));
+  const t = dblTarget(p.files);
+  if (!t) return toast('Ten projekt nie ma pliku do otwarcia.', true);
+  return openFile(p.folder, t.file.name, t.app);
+}
+// Plik i program na dwuklik. Program od dwukliku (wybrany w ustawieniach, inaczej pierwszy
+// na liście) dostaje .f3d, jeśli go obsługuje (np. MitCad – z historią projektu), a jeśli nie, .step.
+// Gdy nie obsługuje żadnego z nich: .step (albo .f3d) w pierwszym pasującym programie.
+function dblTarget(fl) {
+  const first = fl.step || fl.f3d;
+  if (!first) return null;
+  const main = S.dblclick ?? (S.apps && S.apps.length ? 0 : -1);
+  if (main >= 0) {
+    for (const f of [fl.f3d, fl.step]) {
+      if (f && appsFor(f.name).some(x => x.i === main)) return { file: f, app: main };
+    }
+  }
+  return { file: first, app: dblApp(first.name) };
 }
 // Program na dwuklik dla danego pliku: indeks z ustawień albo null (program systemu).
 function dblApp(fileName) {
