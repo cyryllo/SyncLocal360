@@ -1,0 +1,100 @@
+# Wydanie: po wysłaniu tagu vX.Y.Z GitHub buduje AppImage galerii na Linuksa
+# i ZIP dodatku do Fusion, liczy sumy SHA256 i tworzy wydanie (Releases).
+# Opis wydania: release-notes/vX.Y.Z.md (gdy brak – opis wygenerowany z commitów).
+name: Wydanie
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag do (ponownego) zbudowania, np. v1.0.1'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Starsza glibc = AppImage działa też na starszych dystrybucjach.
+    runs-on: ubuntu-22.04
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Sprawdź zgodność wersji z tagiem
+        run: |
+          VER="${TAG#v}"
+          echo "VER=$VER" >> "$GITHUB_ENV"
+          python3 - "$VER" <<'PY'
+          import json, re, sys
+          ver = sys.argv[1]
+          found = {
+              'SyncLocal360.manifest': json.load(open('SyncLocal360.manifest', encoding='utf-8'))['version'],
+              'linux/package.json': json.load(open('linux/package.json'))['version'],
+              'linux/src-tauri/tauri.conf.json': json.load(open('linux/src-tauri/tauri.conf.json'))['version'],
+              'linux/src-tauri/Cargo.toml': re.search(r'^version\s*=\s*"([^"]+)"',
+                                                      open('linux/src-tauri/Cargo.toml').read(), re.M).group(1),
+          }
+          bad = {f: v for f, v in found.items() if v != ver}
+          for f, v in bad.items():
+              print(f'::error file={f}::wersja {v}, a tag mówi {ver}')
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: Biblioteki systemowe (WebKitGTK itd.)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: linux/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: linux/src-tauri
+
+      - name: Testy aplikacji
+        working-directory: linux/src-tauri
+        run: cargo test --locked
+
+      - name: Budowanie AppImage
+        working-directory: linux
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: |
+          npm ci
+          npm run build
+
+      - name: Paczka dodatku do Fusion i sumy SHA256
+        run: |
+          python3 -m py_compile *.py
+          python3 tools/build_fusion_zip.py
+          cp linux/src-tauri/target/release/bundle/appimage/*.AppImage \
+            "dist/SyncLocal360-Galeria-${VER}-x86_64.AppImage"
+          cd dist
+          sha256sum "SyncLocal360_${VER}.zip" "SyncLocal360-Galeria-${VER}-x86_64.AppImage" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Wydanie na GitHubie
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FILES=("dist/SyncLocal360_${VER}.zip" "dist/SyncLocal360-Galeria-${VER}-x86_64.AppImage" dist/SHA256SUMS.txt)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${FILES[@]}" --clobber
+          else
+            NOTES=(--generate-notes)
+            [ -f "release-notes/${TAG}.md" ] && NOTES=(--notes-file "release-notes/${TAG}.md")
+            gh release create "$TAG" "${FILES[@]}" --title "SyncLocal360 ${VER}" "${NOTES[@]}" --verify-tag
+          fi
