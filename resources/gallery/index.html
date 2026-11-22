@@ -148,10 +148,12 @@ aside.side {
 .row .cnt { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
 .row.active .cnt { color: var(--accent); }
 .row .edit {
-  display: none; border: 0; background: none; color: var(--muted); padding: 0 2px;
-  border-radius: 4px; line-height: 1;
+  display: none; border: 0; background: none; color: var(--muted); padding: 2px 4px;
+  border-radius: 4px; line-height: 1; font-size: 13px;
 }
-.row:hover .edit { display: block; }
+/* Przyciski „+” (podkategoria) i „✎” widać po najechaniu i przy wybranej kategorii. */
+.row:hover .edit, .row.active .edit { display: block; }
+.row .edit:hover { background: var(--surface); }
 .row:hover .cnt { display: none; }
 .row .edit:hover { color: var(--accent); }
 .row .tw {
@@ -924,9 +926,11 @@ function catPicker(current, mixed) {
   for (let d = 1; d <= parts.length; d++) {
     const parent = parts.slice(0, d).join(SEP);
     const kids = cats.filter(c => parentOf(c.name) === parent);
-    if (!kids.length) continue;   // nową podkategorię pustej kategorii dodaje „+” w panelu po lewej
-    h += `<div class="catpick sub"><span class="in">${esc(catLabel(parent))} ›</span>` + kids.map(pill).join('') +
-      `<button class="add" data-act="newsub-assign" data-parent="${esc(parent)}">+ Podkategoria…</button></div>`;
+    if (kids.length) h += `<div class="catpick sub"><span class="in">${esc(catLabel(parent))} ›</span>` + kids.map(pill).join('') + '</div>';
+  }
+  if (active) {
+    h += `<div class="catpick sub"><button class="add" data-act="newsub-assign" data-parent="${esc(active)}"` +
+      ` title="Tworzy podkategorię i od razu ją przypisuje">+ Podkategoria w „${esc(catLabel(active))}”…</button></div>`;
   }
   return h;
 }
@@ -968,7 +972,8 @@ function summaryHtml() {
       <kbd>Esc</kbd><span>odznacz</span>
     </div>
     <p class="hint" style="padding:12px 0 0">Projekty możesz też przeciągnąć na kategorię w panelu po lewej.
-      Podkategorię dodasz przyciskiem <b>+</b> przy kategorii (po najechaniu myszą).</p>
+      Podkategorię dodasz przyciskiem <b>+</b> przy kategorii po lewej (widać go po najechaniu myszą
+      i przy wybranej kategorii) albo przyciskiem „+ Podkategoria w …” w panelu projektu.</p>
     <p class="hint credit">SyncLocal360 · Cyryl Sochacki<br>na bazie dodatku NoCloud2 autorstwa Kamila Sokalskiego
       (<a href="https://modelowanie3d.org" target="_blank" rel="noopener">modelowanie3d.org</a>)</p>`;
   return h;

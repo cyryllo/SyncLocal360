@@ -163,7 +163,8 @@ Co potrafi:
 - **Szukanie** po nazwie, folderze w chmurze, etykietach i notatkach (klawisz `/`).
 - **Kategorie** z kolorami i **podkategoriami** (dowolnie głęboko, np. Meble › Krzesła),
   **etykiety**, **notatki**, **ulubione**. Podkategorię dodasz przyciskiem **+** przy kategorii
-  (po najechaniu myszą), a w oknie edycji możesz przenieść kategorię pod inną. Kliknięcie
+  po lewej (widać go po najechaniu myszą i przy wybranej kategorii) albo przyciskiem
+  **+ Podkategoria w …** w panelu projektu. W oknie edycji możesz przenieść kategorię pod inną. Kliknięcie
   kategorii pokazuje też projekty z jej podkategorii.
 - **Porządkowanie wielu projektów naraz**: Ctrl/Shift+klik, potem klawisz **1–9**
   przypisuje kategorię, **0** ją usuwa – albo przeciągnij projekty na kategorię.
