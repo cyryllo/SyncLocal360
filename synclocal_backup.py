@@ -17,9 +17,10 @@ Co robi:
 """
 
 import adsk.core, adsk.fusion, traceback
-import os, json, datetime, time, base64
+import os, json, datetime, time, base64, shutil
 
 import synclocal_core
+import synclocal_files
 
 CMD_ID = 'SyncLocal360_CloudBackup'
 EVENT_ID = 'SyncLocal360_CloudBackupEvent'
@@ -209,6 +210,15 @@ def _save_thumbnail(app, png_path, fit_view):
     synclocal_core.save_via_ascii_path(png_path, _capture)
 
 
+def _is_active(app, doc):
+    try:
+        active = app.activeDocument
+        return active is not None and active.dataFile is not None and doc.dataFile is not None \
+            and active.dataFile.id == doc.dataFile.id
+    except Exception:
+        return False
+
+
 def _open_in_background(app, version_file):
     """Otwiera plik z chmury bez pokazywania go (bez nowej karty). Gdyby Fusion
     odmówił otwarcia w tle, otwiera normalnie (widocznie)."""
@@ -224,9 +234,11 @@ def _open_in_background(app, version_file):
     return doc
 
 
-def _export_version(app, version_file, out_path, thumb_path=None, step_path=None):
+def _export_version(app, version_file, out_path, thumb_path=None, step_path=None, viewport_thumb=False):
     """Otwiera (w tle) wersję pliku z chmury, eksportuje ją do .f3d
-    (i opcjonalnie .step) i zamyka."""
+    (i opcjonalnie .step) i zamyka.
+    viewport_thumb: miniatura ze zrzutu widoku, jeśli dokument jest aktywny (zapis w Fusion -
+    miniatura z chmury może być jeszcze stara albo niegotowa)."""
     doc = _find_open_document(app, version_file)
     opened_here = doc is None
     if opened_here:
@@ -249,7 +261,9 @@ def _export_version(app, version_file, out_path, thumb_path=None, step_path=None
             if not export_mgr.execute(step_options) and not os.path.isfile(step_path):
                 raise RuntimeError('Eksport .step nie powiódł się.')
 
-        if thumb_path and not _save_cloud_thumbnail(version_file, thumb_path):
+        if thumb_path and viewport_thumb and not opened_here and _is_active(app, doc):
+            _save_thumbnail(app, thumb_path, fit_view=False)
+        elif thumb_path and not _save_cloud_thumbnail(version_file, thumb_path):
             # Awaryjnie: zrzut z widoku, ale tylko jeśli dokument jest na ekranie.
             visible = False
             try:
@@ -274,7 +288,13 @@ def _export_version(app, version_file, out_path, thumb_path=None, step_path=None
 
 def backup_data_file(app, data_file, project_name, folder_path, job):
     """Zapisuje najnowszą wersję jednego pliku z chmury do folderu SyncLocal360.
-    Zwraca (status, opis), status: 'ok' | 'skip'.
+    Zwraca (status, opis), status: 'ok' | 'skip' | 'conflict'.
+
+    Plików zmienionych poza Fusion (np. na Linuksie) nie nadpisuje: wersja z chmury
+    trafia obok jako „<nazwa> (chmura vN).f3d” (patrz synclocal_files).
+
+    Pola job: dest, skip_existing, step, folder_index, a przy aktualizacji po zapisie
+    w Fusion także reason, viewport_thumb i keep_previous (stary .f3d do versions/).
 
     Jeśli .f3d jest już aktualny, a brakuje tylko .step, eksportowany jest
     wyłącznie .step (plik i tak trzeba otworzyć w tle, ale bez ponownego
@@ -313,6 +333,22 @@ def backup_data_file(app, data_file, project_name, folder_path, job):
             return 'ok', f'{folder} (v{latest_version}, tylko miniatura)'
         return 'skip', f'aktualny (v{latest_version}), chmura nie dała miniatury'
 
+    # Pliki, które teraz nadpiszemy - czy ktoś ich nie zmienił poza Fusion?
+    f3d_name = synclocal_files.main_file(meta, folder, 'f3d')
+    step_name = synclocal_files.main_file(meta, folder, 'step')
+    to_write = ([] if f3d_ok else [f3d_name]) + ([] if step_ok else [step_name])
+    changed = synclocal_files.changed_locally(target_dir, meta, to_write) if meta else []
+    if changed:
+        return _save_conflict(app, data_file, project_name, folder_path, job, folder, target_dir,
+                              config_path, meta, changed, latest_version, want_step)
+
+    if job.get('keep_previous') and not f3d_ok and os.path.isfile(f3d_path):
+        prev = meta.get('cloud_version') or meta.get('version') or 0
+        versions_dir = os.path.join(target_dir, 'versions')
+        os.makedirs(versions_dir, exist_ok=True)
+        stamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        shutil.copyfile(f3d_path, os.path.join(versions_dir, f'{folder}_v{prev}_{stamp}.f3d'))
+
     os.makedirs(target_dir, exist_ok=True)
     try:
         _export_version(
@@ -320,6 +356,7 @@ def backup_data_file(app, data_file, project_name, folder_path, job):
             out_path=None if f3d_ok else f3d_path,
             thumb_path=None if (f3d_ok and os.path.isfile(png_path)) else png_path,
             step_path=None if step_ok else step_path,
+            viewport_thumb=bool(job.get('viewport_thumb')),
         )
     except Exception:
         # Nie zostawiamy pustych folderów po nieudanym zapisie.
@@ -343,7 +380,7 @@ def backup_data_file(app, data_file, project_name, folder_path, job):
         'thumbnail': f'{folder}.png' if os.path.isfile(png_path) else '',
         'last_saved': datetime.datetime.now().isoformat(timespec='seconds'),
         'version': max(int(meta.get('version') or 0), latest_version),
-        'last_save_reason': 'cloud_backup',
+        'last_save_reason': job.get('reason') or 'cloud_backup',
         'cloud_id': data_file.id,
         'cloud_project': project_name,
         'cloud_folder': '/'.join(folder_path),
@@ -354,6 +391,7 @@ def backup_data_file(app, data_file, project_name, folder_path, job):
         meta['step_file'] = f'{folder}.step'
     if not str(meta.get('tag') or '').strip():
         meta['tag'] = 'unassigned'
+    synclocal_files.record_synced(target_dir, meta, to_write)
     with open(config_path, 'w', encoding='utf-8') as f:
         json.dump(meta, f, indent=2, ensure_ascii=False)
     if index is not None:
@@ -361,6 +399,99 @@ def backup_data_file(app, data_file, project_name, folder_path, job):
 
     what = 'tylko .step' if f3d_ok else ('.f3d + .step' if want_step else '.f3d')
     return 'ok', f'{folder} (v{latest_version}, {what})'
+
+
+def _save_conflict(app, data_file, project_name, folder_path, job, folder, target_dir,
+                   config_path, meta, changed, version, want_step):
+    """Plik w kopii zmieniono poza Fusion: nie nadpisujemy go, wersję z chmury zapisujemy obok."""
+    conflict = meta.get(synclocal_files.CONFLICT_KEY) or {}
+    files = [synclocal_files.conflict_name(folder, version, 'f3d')]
+    if want_step:
+        files.append(synclocal_files.conflict_name(folder, version, 'step'))
+    if int(conflict.get('cloud_version') or 0) >= version and \
+            all(os.path.isfile(os.path.join(target_dir, n)) for n in conflict.get('files') or []):
+        return 'conflict', f'{folder}: zmieniony poza Fusion, wersja z chmury v{version} czeka obok'
+    if int(meta.get(synclocal_files.KEPT_KEY) or 0) >= version:
+        return 'skip', f'{folder}: zostawiona wersja zmieniona poza Fusion'
+
+    _export_version(
+        app, data_file,
+        out_path=os.path.join(target_dir, files[0]),
+        step_path=os.path.join(target_dir, files[1]) if want_step else None,
+        viewport_thumb=False,
+    )
+    # Starsze kopie z chmury z poprzedniego konfliktu są już niepotrzebne (są w chmurze).
+    for old in conflict.get('files') or []:
+        old = os.path.basename(str(old))
+        if old and old not in files:
+            try:
+                os.remove(os.path.join(target_dir, old))
+            except OSError:
+                pass
+    meta[synclocal_files.CONFLICT_KEY] = {
+        'cloud_version': version,
+        'files': [n for n in files if os.path.isfile(os.path.join(target_dir, n))],
+        'changed': changed,
+        'detected': datetime.datetime.now().isoformat(timespec='seconds'),
+    }
+    meta.update({'cloud_id': data_file.id, 'cloud_project': project_name,
+                 'cloud_folder': '/'.join(folder_path)})
+    with open(config_path, 'w', encoding='utf-8') as f:
+        json.dump(meta, f, indent=2, ensure_ascii=False)
+    if job.get('folder_index') is not None:
+        job['folder_index'][data_file.id] = folder
+    return 'conflict', (f'{folder}: {", ".join(changed)} zmieniony poza Fusion - nie nadpisano, '
+                        f'wersja z chmury v{version} zapisana obok')
+
+
+# ---------------------------------------------------------------------------
+# AKTUALIZACJA PO ZAPISIE W FUSION
+# ---------------------------------------------------------------------------
+def cloud_location(data_file):
+    """(nazwa projektu, [foldery od korzenia]) pliku w chmurze."""
+    project_name = data_file.parentProject.name
+    path = []
+    folder = data_file.parentFolder
+    while folder is not None and not folder.isRoot:
+        path.insert(0, folder.name)
+        folder = folder.parentFolder
+    return project_name, path
+
+
+def sync_open_document(app, doc, reason, keep_previous=False):
+    """Aktualizuje kopię otwartego dokumentu z chmury w folderze kopii (ten sam folder,
+    który robi „Kopia z chmury”). Zwraca (status, opis) albo None, gdy to nie plik z chmury."""
+    try:
+        data_file = doc.dataFile
+    except Exception:
+        data_file = None
+    if data_file is None:
+        return None
+    settings = synclocal_core.load_settings()
+    project_name, path = cloud_location(data_file)
+    job = {
+        'dest': synclocal_core.get_vault_dir(),
+        'skip_existing': False,          # zapis w Fusion = nowa treść, zawsze eksportujemy
+        'step': bool(settings.get('backup_step', False)),
+        'reason': reason,
+        'viewport_thumb': True,
+        'keep_previous': keep_previous,
+    }
+    status, info = backup_data_file(app, data_file, project_name, path, job)
+    _sync_log(job['dest'], status, f'{project_name}/{"/".join(path + [data_file.name])}: {info}')
+    return status, info
+
+
+def _sync_log(dest, status, line):
+    """Krótki log automatycznych aktualizacji (sync_log.txt, najwyżej ~1 MB + .old)."""
+    try:
+        path = os.path.join(dest, 'sync_log.txt')
+        if os.path.isfile(path) and os.path.getsize(path) > 1_000_000:
+            os.replace(path, path + '.old')
+        with open(path, 'a', encoding='utf-8') as f:
+            f.write(f'{datetime.datetime.now().isoformat(timespec="seconds")} [{status}] {line}\n')
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -452,7 +583,7 @@ def run_backup(job):
     progress.message = 'Odczyt folderu kopii...'
     adsk.doEvents()
     job['folder_index'] = _build_folder_index(job['dest'])
-    counts = {'ok': 0, 'skip': 0, 'err': len(listing_errors)}
+    counts = {'ok': 0, 'skip': 0, 'conflict': 0, 'err': len(listing_errors)}
     for msg in listing_errors:
         log.add(f'[BŁĄD] {msg}')
     cancelled = False
@@ -470,7 +601,8 @@ def run_backup(job):
         try:
             status, info = backup_data_file(app, data_file, project_name, path, job)
             counts[status] += 1
-            log.add(f"[{'OK' if status == 'ok' else 'POMINIĘTO'}] {location} -> {info}")
+            label = {'ok': 'OK', 'skip': 'POMINIĘTO', 'conflict': 'ZMIENIONY LOKALNIE'}[status]
+            log.add(f"[{label}] {location} -> {info}")
         except Exception as e:
             counts['err'] += 1
             log.add(f'[BŁĄD] {location}: {e}\n        {traceback.format_exc(limit=2).strip()}')
@@ -487,13 +619,17 @@ def run_backup(job):
         pass
 
     # 3. Log + podsumowanie.
-    log.finish(f'Zapisano: {counts["ok"]}, pominięto: {counts["skip"]}, błędy: {counts["err"]}'
+    log.finish(f'Zapisano: {counts["ok"]}, pominięto: {counts["skip"]}, '
+               f'zmienione poza Fusion: {counts["conflict"]}, błędy: {counts["err"]}'
                + (' (PRZERWANO)' if cancelled else ''))
     log_path = log.path if log.ok else '(nie udało się zapisać logu)'
 
     summary = (
         ('Kopia przerwana przez użytkownika.\n\n' if cancelled else 'Kopia zakończona.\n\n')
-        + f'Zapisano: {counts["ok"]}\nPominięto (już aktualne): {counts["skip"]}\nBłędy: {counts["err"]}\n\n'
+        + f'Zapisano: {counts["ok"]}\nPominięto (już aktualne): {counts["skip"]}\nBłędy: {counts["err"]}\n'
+        + (f'Zmienione poza Fusion (nie nadpisano, wersja z chmury zapisana obok – wybierz w galerii): '
+           f'{counts["conflict"]}\n' if counts['conflict'] else '')
+        + '\n'
         + f'Folder: {job["dest"]}\nLog: {log_path}'
     )
     ui.messageBox(summary, 'SyncLocal360 - kopia zapasowa')
@@ -615,6 +751,11 @@ class BackupExecuteHandler(adsk.core.CommandEventHandler):
         try:
             inputs = args.command.commandInputs
             dest = inputs.itemById('bkDir').value or synclocal_core.get_vault_dir()
+            # Folder kopii to też folder Szybkiego Zapisu, aktualizacji po zapisie i galerii.
+            settings = synclocal_core.load_settings()
+            if dest and settings.get('vault_dir') != dest:
+                settings['vault_dir'] = dest
+                synclocal_core.save_settings(settings)
             job = {
                 'dest': dest,
                 'skip_existing': inputs.itemById('bkSkip').value,

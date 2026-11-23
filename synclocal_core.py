@@ -22,6 +22,7 @@ DEFAULT_SETTINGS = {
     "ask_name_enabled": False,
     "notify_on_save": True,
     "backup_step": False,
+    "sync_on_save": True,      # po zapisie w Fusion aktualizuj kopię w folderze kopii
 }
 
 UNNAMED_DOC_NAMES = ("Unnamed", "Bez nazwy", "Bez tytułu", "Untitled")
@@ -165,6 +166,17 @@ def save_current_document_to_vault(reason="manual"):
         doc = design.parentDocument if design else None
         if doc is None:
             return False, "Brak aktywnego projektu Fusion (Design)."
+
+        # Plik z chmury: ten sam folder co „Kopia z chmury” (rozpoznawany po id pliku),
+        # z ochroną plików zmienionych poza Fusion. Bez tego powstawał duplikat <Nazwa>_1.
+        import synclocal_backup
+        result = synclocal_backup.sync_open_document(
+            app, doc, reason, keep_previous=settings.get("versioning_enabled", False))
+        if result is not None:
+            status, info = result
+            if status == "conflict":
+                return False, info
+            return True, info.split(" (")[0]
 
         raw_name = doc.name or "Unnamed"
         if raw_name.lower().endswith(".f3d"):
@@ -315,11 +327,91 @@ class _AutosaveEventHandler(adsk.core.CustomEventHandler):
         try:
             if settings.get("autosave_enabled"):
                 app = adsk.core.Application.get()
-                if adsk.fusion.Design.cast(app.activeProduct) is not None:
+                design = adsk.fusion.Design.cast(app.activeProduct)
+                # Tylko gdy w projekcie są niezapisane zmiany - inaczej kopia jest aktualna
+                # (zapis w Fusion aktualizuje ją sam), a z wersjonowaniem przybywałoby kopii.
+                if design is not None and design.parentDocument.isModified:
                     save_current_document_to_vault(reason="autosave")
         except Exception:
             pass
         _schedule_next_tick(settings.get("autosave_interval_min", 10))
+
+
+# ---------------------------------------------------------------------------
+# AKTUALIZACJA PO ZAPISIE W FUSION
+# documentSaved tylko zapamiętuje dokument; eksport robi custom event chwilę
+# później, gdy Fusion skończy zapis.
+# ---------------------------------------------------------------------------
+SYNC_EVENT_ID = "SyncLocal360_SyncEvent"
+_sync_event = None
+_sync_pending = []
+_sync_conflicts_shown = set()
+
+
+class _DocumentSavedHandler(adsk.core.DocumentEventHandler):
+    def notify(self, args):
+        try:
+            if not load_settings().get("sync_on_save", True):
+                return
+            doc = args.document
+            if doc is not None and doc not in _sync_pending:
+                _sync_pending.append(doc)
+                adsk.core.Application.get().fireCustomEvent(SYNC_EVENT_ID, "")
+        except Exception:
+            pass
+
+
+class _SyncEventHandler(adsk.core.CustomEventHandler):
+    def notify(self, args):
+        import synclocal_backup
+        app = adsk.core.Application.get()
+        while _sync_pending:
+            doc = _sync_pending.pop(0)
+            try:
+                if not doc.isValid:
+                    continue
+                result = synclocal_backup.sync_open_document(app, doc, "fusion_save")
+            except Exception as e:
+                synclocal_backup._sync_log(get_vault_dir(), "err", f"{getattr(doc, 'name', '?')}: {e}")
+                continue
+            if result and result[0] == "conflict" and result[1] not in _sync_conflicts_shown:
+                _sync_conflicts_shown.add(result[1])
+                app.userInterface.messageBox(
+                    "Kopia na dysku była zmieniona poza Fusion (np. na Linuksie), więc jej nie nadpisano.\n\n"
+                    + result[1] + "\n\nW galerii wybierz, którą wersję zostawić.",
+                    "SyncLocal360 – aktualizacja kopii")
+
+
+def start_sync():
+    global _sync_event
+    app = adsk.core.Application.get()
+    try:
+        app.unregisterCustomEvent(SYNC_EVENT_ID)
+    except Exception:
+        pass
+    _sync_event = app.registerCustomEvent(SYNC_EVENT_ID)
+    on_sync = _SyncEventHandler()
+    _sync_event.add(on_sync)
+    on_saved = _DocumentSavedHandler()
+    app.documentSaved.add(on_saved)
+    _handlers.extend([on_sync, on_saved])
+
+
+def stop_sync():
+    global _sync_event
+    app = adsk.core.Application.get()
+    for h in list(_handlers):
+        if isinstance(h, _DocumentSavedHandler):
+            try:
+                app.documentSaved.remove(h)
+            except Exception:
+                pass
+    try:
+        app.unregisterCustomEvent(SYNC_EVENT_ID)
+    except Exception:
+        pass
+    _sync_event = None
+    _sync_pending.clear()
 
 
 def restart_autosave_timer():

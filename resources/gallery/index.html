@@ -258,6 +258,16 @@ aside.panel {
 .btn.primary:hover { filter: brightness(1.07); background: var(--accent); }
 .btn.danger { color: var(--danger); }
 .btn.on { color: var(--star); }
+.warnbox {
+  margin-top: 14px; padding: 10px 12px; border-radius: 9px; font-size: 13px;
+  border: 1px solid color-mix(in srgb, var(--star) 55%, transparent);
+  background: color-mix(in srgb, var(--star) 10%, var(--surface));
+}
+.warnbox b { display: block; margin-bottom: 4px; }
+.warnbox .actions { margin-top: 8px; }
+.warnbox small { display: block; margin-top: 6px; color: var(--muted); }
+.chip.warn { color: var(--star); border-color: color-mix(in srgb, var(--star) 50%, transparent); }
+.frow .fn .tagline { font-weight: 400; color: var(--muted); }
 .catpick { display: flex; flex-wrap: wrap; gap: 6px; }
 .catpick button {
   display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 99px;
@@ -348,6 +358,7 @@ dialog.wide { width: min(680px, 94vw); }
 .approw input:focus { outline: none; border-color: var(--accent); }
 .approw button { border: 0; background: none; color: var(--muted); font-size: 16px; padding: 0 6px; }
 .approw button:hover { color: var(--danger); }
+aside.panel code { font: 11.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--surface-2); padding: 1px 4px; border-radius: 4px; overflow-wrap: anywhere; }
 dialog code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--surface-2); padding: 1px 4px; border-radius: 4px; }
 .files { display: grid; gap: 8px; }
 .frow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
@@ -454,7 +465,8 @@ dialog code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospac
     <div id="setRecent"></div>
     <label>Programy do otwierania plików</label>
     <p class="hint" style="padding:0 0 8px">Polecenie: <code>%f</code> to ścieżka pliku (bez <code>%f</code> ścieżka idzie na koniec).
-      Rozszerzenia po przecinku, puste = wszystkie pliki. Przykłady: <code>freecad %f</code>,
+      Rozszerzenia po przecinku, puste = wszystkie pliki. Dopisz też własny format programu
+      (np. <code>mitcad</code>, <code>fcstd</code>) – dwuklik otworzy taki plik z folderu projektu przed STEP. Przykłady: <code>freecad %f</code>,
       <code>flatpak run org.freecad.FreeCAD %f</code>, <code>~/Aplikacje/FreeCAD.AppImage %f</code>.</p>
     <div id="appRows"></div>
     <button type="button" class="btn" id="appAdd">+ Dodaj program</button>
@@ -473,7 +485,8 @@ dialog code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospac
 const TOKEN = '__SYNCLOCAL_TOKEN__';
 const PALETTE = ['#2c7be5', '#16a34a', '#e8a317', '#dc4a3d', '#8b5cf6', '#db2777',
                  '#0d9488', '#ea7317', '#64748b', '#65a30d', '#0891b2', '#a16207'];
-const REASONS = { cloud_backup: 'Kopia z chmury', manual: 'Szybki Zapis', autosave: 'Autozapis' };
+const REASONS = { cloud_backup: 'Kopia z chmury', manual: 'Szybki Zapis', autosave: 'Autozapis',
+                  fusion_save: 'Zapis w Fusion' };
 const NONE_CLOUD = '\u0000';
 // Podkategorie: pełna nazwa to ścieżka z "/", np. "Meble/Krzesła" (pole tag w config.json).
 const SEP = '/';
@@ -533,7 +546,7 @@ const TAURI = window.__TAURI__ && window.__TAURI__.core;
 const TAURI_CMD = {
   '/api/state': 'get_state', '/api/projects': 'update_projects_cmd',
   '/api/categories': 'save_categories_cmd', '/api/categories/rename': 'rename_category_cmd',
-  '/api/open-folder': 'open_folder', '/api/open-file': 'open_file',
+  '/api/open-folder': 'open_folder', '/api/open-file': 'open_file', '/api/conflict': 'resolve_conflict_cmd',
   '/api/pick-vault': 'pick_vault', '/api/set-vault': 'set_vault', '/api/settings': 'save_settings',
 };
 async function api(path, data) {
@@ -688,6 +701,7 @@ function computeVisible() {
   const words = norm(f.q).split(/\s+/).filter(Boolean);
   const list = S.projects.filter(p => {
     if (f.view === 'none' && p.category) return false;
+    if (f.view === 'conflict' && !p.conflict) return false;
     if (f.view === 'fav' && !p.favorite) return false;
     if (f.view.startsWith('cat:') && !inCat(p.category, f.view.slice(4))) return false;
     if (f.cloud && !inCloud(cloudKey(p), f.cloud)) return false;
@@ -786,6 +800,12 @@ function renderSide() {
   h += row('data-view="all"', `${ICONS.all}<span class="lbl">Wszystkie</span><span class="cnt">${P.length}</span>`, f.view === 'all');
   h += row('data-view="fav"', `${ICONS.fav}<span class="lbl">Ulubione</span><span class="cnt">${count(p => p.favorite)}</span>`, f.view === 'fav', 'fav');
   h += row('data-view="none"', `${ICONS.none}<span class="lbl">Bez kategorii</span><span class="cnt">${count(p => !p.category)}</span>`, f.view === 'none', 'none');
+  const nConf = count(p => p.conflict);
+  if (nConf || f.view === 'conflict') {
+    h += row('data-view="conflict" title="Kopia zmieniona poza Fusion, a obok czeka nowa wersja z chmury"',
+      `<span class="ico" style="color:var(--star);text-align:center;line-height:14px">⚠</span><span class="lbl">Zmienione poza Fusion</span><span class="cnt">${nConf}</span>`,
+      f.view === 'conflict');
+  }
 
   h += '<div class="sec">Kategorie <button data-act="newcat" title="Nowa kategoria">+ Nowa</button></div>';
   const cats = allCats();
@@ -867,7 +887,7 @@ $('side').addEventListener('drop', e => {
 // ---------- siatka ----------
 const cardCache = new Map();  // folder -> {el, sig}
 function cardSig(p) {
-  return JSON.stringify([p.name, p.category, p.category && catColor(p.category), p.tags, p.favorite,
+  return JSON.stringify([!!p.conflict, p.name, p.category, p.category && catColor(p.category), p.tags, p.favorite,
     p.cloud_project, p.cloud_folder, (p.files.png || {}).mtime]);
 }
 const PH = '<div class="ph"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M12 2.8 20 7.4v9.2l-8 4.6-8-4.6V7.4z"/><path d="M4 7.4 12 12l8-4.6M12 12v9.2"/></svg>brak miniatury</div>';
@@ -882,6 +902,7 @@ function makeCard(p) {
   if (p.category) chips += `<span class="chip" title="${esc(catLabel(p.category))}"><span class="dot" style="background:${esc(catColor(p.category))}"></span>${esc(catLabel(p.category))}</span>`;
   for (const t of p.tags.slice(0, 3)) chips += `<span class="chip tag">#${esc(t)}</span>`;
   if (p.tags.length > 3) chips += `<span class="chip tag">+${p.tags.length - 3}</span>`;
+  if (p.conflict) chips = `<span class="chip warn" title="Zmieniony poza Fusion – obok czeka nowa wersja z chmury">⚠ zmiany lokalne</span>` + chips;
   el.innerHTML =
     `<div class="th">${img}</div>` +
     `<button class="check" title="Zaznacz (Ctrl+klik)" aria-label="Zaznacz"></button>` +
@@ -919,6 +940,7 @@ function renderStatus() {
   const chip = (label, key) => `<span class="chipf">${label}<button data-clear="${key}" title="Usuń filtr">×</button></span>`;
   if (f.view === 'fav') h += chip('Ulubione', 'view');
   if (f.view === 'none') h += chip('Bez kategorii', 'view');
+  if (f.view === 'conflict') h += chip('⚠ Zmienione poza Fusion', 'view');
   if (f.view.startsWith('cat:')) h += chip(`<span class="dot" style="background:${esc(catColor(f.view.slice(4)))}"></span>${esc(catLabel(f.view.slice(4)))}`, 'view');
   if (f.cloud) h += chip((f.cloud === NONE_CLOUD ? '' : '☁ ') + esc(cloudLabel(f.cloud)), 'cloud');
   if (f.tag) h += chip('#' + esc(f.tag), 'tag');
@@ -1064,6 +1086,15 @@ function detailHtml(p) {
   }
   h += `<button class="btn" data-act="folder">Pokaż folder</button>`;
   h += `<button class="btn${p.favorite ? ' on' : ''}" data-act="fav">${p.favorite ? '★ Ulubiony' : '☆ Ulubiony'}</button></div>`;
+  if (p.conflict) {
+    const c = p.conflict, local = (c.changed || []).join(', ') || 'plik projektu';
+    h += `<div class="warnbox"><b>⚠ Zmieniony poza Fusion</b>` +
+      `${esc(local)} zmieniono poza Fusion (np. na Linuksie), więc aktualizacja z chmury go nie nadpisała. ` +
+      `Nowa wersja z chmury (v${esc(c.cloud_version)}) leży obok: ${(c.files || []).map(n => `<code>${esc(n)}</code>`).join(', ')}.` +
+      `<div class="actions"><button class="btn" data-conflict="cloud">Użyj wersji z chmury</button>` +
+      `<button class="btn" data-conflict="local">Zostaw moją</button></div>` +
+      `<small>Nic nie jest kasowane – odrzucona wersja trafia do folderu versions/.</small></div>`;
+  }
   h += `<h3>Kategoria</h3>${catPicker(p.category, false)}`;
   h += `<h3>Etykiety</h3><div class="tagbox">` +
     p.tags.map(t => `<span class="chip">#${esc(t)}<button data-rmtag="${esc(t)}" title="Usuń etykietę">×</button></span>`).join('') +
@@ -1071,20 +1102,31 @@ function detailHtml(p) {
   h += `<h3>Notatka</h3><textarea id="note" data-f="${esc(p.folder)}" placeholder="Zapisuje się po wyjściu z pola">${esc(p.note)}</textarea>`;
   const fl = p.files;
   h += '<h3>Pliki</h3><div class="files">';
-  const dt = !S.fusion && S.apps ? dblTarget(fl) : null;
-  for (const kind of ['step', 'f3d']) {
-    const f = fl[kind];
-    if (!f) continue;
-    const dbl = dt && f === dt.file ? dt.app : undefined;   // undefined = nie ten plik
+  const dt = !S.fusion && S.apps ? dblTarget(p) : null;
+  const conflictFiles = new Set((p.conflict && p.conflict.files) || []);
+  const fileRow = (f, label, note) => {
+    const dbl = dt && f.name === dt.file.name ? dt.app : undefined;   // undefined = nie ten plik
     const cls = on => on ? 'btn primary' : 'btn';
     const tip = on => on ? ' (dwuklik na miniaturze)' : '';
-    h += `<div class="frow"><div class="fn"><span>.${kind}</span><span>${fmtSize(f.size)}</span></div>`;
-    h += appsFor(f.name).map(({ app, i }) =>
-      `<button class="${cls(dbl === i)}" data-open="${esc(f.name)}" data-app="${i}" title="${esc(app.command)}${tip(dbl === i)}">${esc(app.name)}</button>`).join('');
-    h += `<button class="${cls(dbl === null)}" data-open="${esc(f.name)}" title="Program domyślny w systemie${tip(dbl === null)}">${S.apps ? 'Domyślny program' : 'Otwórz'}</button></div>`;
+    const isF3d = extOf(f.name) === 'f3d';
+    let r = `<div class="frow"><div class="fn"><span title="${esc(f.name)}">${esc(label)}${note ? ` <span class="tagline">${esc(note)}</span>` : ''}</span><span>${fmtSize(f.size)}</span></div>`;
+    // .f3d to format Fusion - inne programy (np. MitCad) tylko go importują.
+    r += appsFor(f.name).map(({ app, i }) =>
+      `<button class="${cls(dbl === i)}" data-open="${esc(f.name)}" data-app="${i}" title="${esc(app.command)}${tip(dbl === i)}">${esc(app.name)}${isF3d ? ' (import)' : ''}</button>`).join('');
+    r += `<button class="${cls(dbl === null)}" data-open="${esc(f.name)}" title="Program domyślny w systemie${tip(dbl === null)}">${S.apps ? 'Domyślny program' : 'Otwórz'}</button></div>`;
+    return r;
+  };
+  for (const { file } of nativeFiles(p)) h += fileRow(file, file.name, 'plik programu');
+  if (fl.step) h += fileRow(fl.step, '.step', '');
+  if (fl.f3d) h += fileRow(fl.f3d, '.f3d', 'Fusion');
+  const natives = new Set(nativeFiles(p).map(x => x.file.name));
+  for (const f of p.other || []) {
+    if (natives.has(f.name)) continue;
+    h += fileRow(f, f.name, conflictFiles.has(f.name) ? 'wersja z chmury – czeka na decyzję' : '');
   }
   if (!fl.f3d) h += '<div class="frow" style="color:var(--danger)">brak pliku .f3d</div>';
   if (!fl.step) h += '<div class="hint" style="padding:0">Bez .step (kopia bez opcji „eksportuj do STEP”).</div>';
+  if (S.apps) h += '<div class="hint" style="padding:0">Zapisz pracę z programu w tym folderze (np. <code>.mitcad</code>, <code>.FCStd</code>) – pojawi się tu, a dwuklik otworzy ją zamiast STEP.</div>';
   h += '</div>';
   h += '<h3>Informacje</h3><dl>';
   h += `<dt>Wersja</dt><dd>${p.version ? 'v' + esc(p.version) : '—'}${p.versions ? ` · ${p.versions} lokalnych w versions/` : ''}</dd>`;
@@ -1114,22 +1156,39 @@ function openDefault(p) {
     return api('/api/fusion', { action: 'open', folder: p.folder })
       .then(() => toast('Otwieram w Fusion…'), e => toast(e.message, true));
   }
-  const t = dblTarget(p.files);
+  const t = dblTarget(p);
   if (!t) return toast('Ten projekt nie ma pliku do otwarcia.', true);
   return openFile(p.folder, t.file.name, t.app);
 }
-// Plik i program na dwuklik. Program od dwukliku (wybrany w ustawieniach, inaczej pierwszy
-// na liście) dostaje .f3d, jeśli go obsługuje (np. MitCad – z historią projektu), a jeśli nie, .step.
-// Gdy nie obsługuje żadnego z nich: .step (albo .f3d) w pierwszym pasującym programie.
-function dblTarget(fl) {
+// Formaty wymiany między programami; pozostałe rozszerzenia programu to jego własny format
+// (np. .mitcad w MitCad, .FCStd we FreeCAD).
+const EXCHANGE = new Set(['step', 'stp', 'iges', 'igs', 'stl', '3mf', 'obj', 'f3d', 'f3z', 'brep', 'brp',
+                          'dxf', 'dwg', 'svg', 'png', 'jpg', 'jpeg', 'pdf', 'txt']);
+const extOf = n => (String(n).split('.').pop() || '').toLowerCase();
+const nativeOf = app => (app.exts || []).filter(e => !EXCHANGE.has(e));
+// Pliki w formacie własnym któregoś programu z ustawień, najnowsze najpierw.
+function nativeFiles(p) {
+  if (!S.apps) return [];
+  const out = [];
+  for (const f of p.other || []) {
+    const i = S.apps.findIndex(a => nativeOf(a).includes(extOf(f.name)));
+    if (i >= 0) out.push({ file: f, app: i });
+  }
+  return out.sort((a, b) => (b.file.mtime || 0) - (a.file.mtime || 0));
+}
+// Plik i program na dwuklik:
+//  1. plik we własnym formacie programu (najpierw programu od dwukliku, potem najnowszy),
+//  2. .step w programie od dwukliku (wybranym w ustawieniach, inaczej pierwszym na liście),
+//  3. .step albo .f3d w pierwszym pasującym programie. .f3d jest ostatni, bo inne
+//     programy go tylko importują (MitCad nie zawsze sobie z nim radzi).
+function dblTarget(p) {
+  const fl = p.files;
+  const main = S.dblclick ?? (S.apps && S.apps.length ? 0 : -1);
+  const nat = nativeFiles(p);
+  if (nat.length) return nat.find(x => x.app === main) || nat[0];
   const first = fl.step || fl.f3d;
   if (!first) return null;
-  const main = S.dblclick ?? (S.apps && S.apps.length ? 0 : -1);
-  if (main >= 0) {
-    for (const f of [fl.f3d, fl.step]) {
-      if (f && appsFor(f.name).some(x => x.i === main)) return { file: f, app: main };
-    }
-  }
+  if (main >= 0 && fl.step && appsFor(fl.step.name).some(x => x.i === main)) return { file: fl.step, app: main };
   return { file: first, app: dblApp(first.name) };
 }
 // Program na dwuklik dla danego pliku: indeks z ustawień albo null (program systemu).
@@ -1177,6 +1236,16 @@ $('panel').addEventListener('click', async e => {
     try {
       await api('/api/fusion', { action: fu.dataset.fusion, folder: folders[0] });
       toast(fu.dataset.fusion === 'open' ? 'Otwieram w Fusion…' : 'Wstawiam do aktywnego projektu…');
+    } catch (err) { toast(err.message, true); }
+    return;
+  }
+  const cf = t.closest('[data-conflict]');
+  if (cf) {
+    try {
+      const j = await api('/api/conflict', { folder: folders[0], use: cf.dataset.conflict });
+      mergeProjects(j.projects);
+      renderAll();
+      toast(cf.dataset.conflict === 'cloud' ? 'Użyto wersji z chmury (Twoja jest w versions/)' : 'Zostawiono Twoją wersję (ta z chmury jest w versions/)');
     } catch (err) { toast(err.message, true); }
     return;
   }

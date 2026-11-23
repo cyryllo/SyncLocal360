@@ -39,6 +39,9 @@ import webbrowser
 import urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import synclocal_files
+
 ADDIN_PATH = os.path.dirname(os.path.realpath(__file__))
 HTML_PATH = os.path.join(ADDIN_PATH, 'resources', 'gallery', 'index.html')
 SETTINGS_PATH = os.path.join(ADDIN_PATH, 'synclocal_settings.json')
@@ -126,6 +129,21 @@ def _project_item(vault, folder, meta):
         info = _file_info(os.path.join(path, os.path.basename(name)))
         if info:
             files[kind] = dict(info, name=os.path.basename(name))
+    # Pozostałe pliki: zapisane przez programy na Linuksie (np. .mitcad, .FCStd)
+    # i wersje z chmury czekające na decyzję („nazwa (chmura vN).f3d”).
+    known = {f['name'] for f in files.values()}
+    other = []
+    try:
+        names = sorted(os.listdir(path), key=str.lower)
+    except OSError:
+        names = []
+    for n in names:
+        if n == 'config.json' or n.startswith('.') or n.endswith('.tmp') or n in known:
+            continue
+        full = os.path.join(path, n)
+        info = _file_info(full) if os.path.isfile(full) else None
+        if info:
+            other.append(dict(info, name=n))
     versions_dir = os.path.join(path, 'versions')
     versions = 0
     if os.path.isdir(versions_dir):
@@ -144,6 +162,8 @@ def _project_item(vault, folder, meta):
         'reason': meta.get('last_save_reason') or '',
         'versions': versions,
         'files': files,
+        'other': other,
+        'conflict': meta.get('conflict') if isinstance(meta.get('conflict'), dict) else None,
     }
 
 
@@ -435,6 +455,11 @@ class _Handler(BaseHTTPRequestHandler):
                     n = rename_category(vault, data.get('old'), data.get('new'))
                 return self._send(200, {'ok': True, 'changed': n,
                                         'categories': load_categories(vault)})
+            if path == '/api/conflict':
+                folder = data.get('folder')
+                with _write_lock:
+                    meta = synclocal_files.resolve_conflict(_project_dir(vault, folder), data.get('use'))
+                return self._send(200, {'ok': True, 'projects': [_project_item(vault, folder, meta)]})
             if path == '/api/open-folder':
                 open_in_file_manager(vault, data.get('folder'))
                 return self._send(200, {'ok': True})

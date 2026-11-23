@@ -50,6 +50,9 @@ struct Settings {
     /// brak = pierwszy program pasujący do rozszerzenia.
     #[serde(default)]
     dblclick: Option<i64>,
+    /// Własne formaty (NATIVE_EXTS) zostały już raz dopisane do znanych programów.
+    #[serde(default)]
+    native_exts_added: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -170,7 +173,9 @@ fn quoted(path: &Path) -> String {
 }
 
 /// Rozszerzenia dla MitCad: otwiera `.f3d` z historią projektu, a do tego STEP i inne.
-const MITCAD_EXTS: [&str; 8] = ["f3d", "f3z", "step", "stp", "iges", "igs", "stl", "3mf"];
+const MITCAD_EXTS: [&str; 9] = ["mitcad", "step", "stp", "iges", "igs", "stl", "3mf", "f3d", "f3z"];
+/// Własne formaty programów (galeria otwiera je dwuklikiem zamiast STEP).
+const NATIVE_EXTS: [(&str, &str); 3] = [("mitcad", "mitcad"), ("freecad", "fcstd"), ("solvespace", "slvs")];
 
 /// Programy CAD znalezione w systemie.
 fn detect_apps() -> Vec<AppEntry> {
@@ -206,7 +211,8 @@ fn detect_apps() -> Vec<AppEntry> {
         freecad = Some("flatpak run org.freecad.FreeCAD %f".into());
     }
     if let Some(cmd) = freecad {
-        apps.push(entry("FreeCAD", cmd, &cad_exts));
+        let exts: Vec<&str> = std::iter::once("fcstd").chain(cad_exts).collect();
+        apps.push(entry("FreeCAD", cmd, &exts));
     }
     if on_path("solvespace") {
         apps.push(entry("SolveSpace", "solvespace %f".into(), &["slvs"]));
@@ -216,6 +222,24 @@ fn detect_apps() -> Vec<AppEntry> {
 
 /// Dopisuje wykryte programy, których aplikacja jeszcze nie proponowała
 /// i których nie ma już na liście (porównanie po nazwie). Zwraca true, gdy coś dodano.
+/// Jednorazowo dopisuje własny format programu (np. `mitcad`, `fcstd`) na początek
+/// jego rozszerzeń - w ustawieniach sprzed wersji 1.0.5 go nie było.
+fn add_native_exts(settings: &mut Settings) -> bool {
+    if settings.native_exts_added {
+        return false;
+    }
+    settings.native_exts_added = true;
+    for app in settings.apps.iter_mut() {
+        let name = app.name.to_lowercase();
+        if let Some((_, ext)) = NATIVE_EXTS.iter().find(|(n, _)| name.contains(n)) {
+            if !app.exts.is_empty() && !app.exts.iter().any(|e| e == ext) {
+                app.exts.insert(0, ext.to_string());
+            }
+        }
+    }
+    true
+}
+
 fn add_detected_apps(settings: &mut Settings) -> bool {
     if settings.apps_initialized && settings.apps_offered.is_empty() {
         // Ustawienia sprzed `apps_offered`: wtedy wykrywano tylko FreeCAD i SolveSpace.
@@ -339,6 +363,16 @@ fn project_item(vault: &Path, folder: &str, meta: &Value) -> Value {
             files.insert(kind.into(), info);
         }
     }
+    // Pozostałe pliki projektu: zapisane przez programy na Linuksie (np. .mitcad, .FCStd)
+    // i wersje z chmury czekające na decyzję („nazwa (chmura vN).f3d”).
+    let known: Vec<String> = files.values().map(|v| str_of(v.get("name"))).collect();
+    let mut other: Vec<Value> = fs::read_dir(&dir).map(|rd| rd.filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let n = e.file_name().to_string_lossy().to_string();
+            let skip = n == "config.json" || n.starts_with('.') || n.ends_with(".tmp") || known.contains(&n);
+            if skip { None } else { file_info(&e.path(), &n) }
+        }).collect()).unwrap_or_default();
+    other.sort_by_key(|v| str_of(v.get("name")).to_lowercase());
     let versions = fs::read_dir(dir.join("versions"))
         .map(|rd| rd.filter_map(|e| e.ok())
             .filter(|e| e.file_name().to_string_lossy().to_lowercase().ends_with(".f3d"))
@@ -361,6 +395,8 @@ fn project_item(vault: &Path, folder: &str, meta: &Value) -> Value {
         "reason": str_of(meta.get("last_save_reason")),
         "versions": versions,
         "files": files,
+        "other": other,
+        "conflict": meta.get("conflict").filter(|v| v.is_object()).cloned().unwrap_or(Value::Null),
     })
 }
 
@@ -473,6 +509,80 @@ fn update_projects(vault: &Path, folders: &[String], ch: &Map<String, Value>) ->
         updated.push(project_item(vault, folder, &meta));
     }
     Ok(updated)
+}
+
+// ---------------------------------------------------------------------------
+// KONFLIKT: plik zmieniony poza Fusion, a obok wersja z chmury (synclocal_files.py)
+// ---------------------------------------------------------------------------
+fn fingerprint(path: &Path) -> Option<Value> {
+    let md = fs::metadata(path).ok()?;
+    let mtime = md.modified().ok()?.duration_since(UNIX_EPOCH).ok()?.as_secs();
+    Some(json!([md.len(), mtime]))
+}
+
+/// Wolna nazwa w `versions/` (z dopiskiem _1, _2… gdy zajęta).
+fn versions_path(dir: &Path, base: &str) -> Result<PathBuf, String> {
+    let versions = dir.join("versions");
+    fs::create_dir_all(&versions).map_err(|e| e.to_string())?;
+    let (stem, ext) = base.rsplit_once('.').unwrap_or((base, ""));
+    let mut path = versions.join(base);
+    let mut n = 1;
+    while path.exists() {
+        path = versions.join(format!("{stem}_{n}.{ext}"));
+        n += 1;
+    }
+    Ok(path)
+}
+
+/// `use_cloud`: wersja z chmury staje się główną (plik zmieniony lokalnie idzie do versions/),
+/// inaczej zostaje plik lokalny, a wersja z chmury idzie do versions/. Nic nie jest kasowane.
+fn resolve_conflict(dir: &Path, use_cloud: bool) -> Result<Value, String> {
+    let cfg = dir.join("config.json");
+    let mut meta = read_json(&cfg).filter(|v| v.is_object()).ok_or("Nie da się odczytać config.json.")?;
+    let conflict = meta.get("conflict").filter(|v| v.is_object()).cloned()
+        .ok_or("Ten projekt nie ma konfliktu wersji.")?;
+    let folder = base_name(&dir.to_string_lossy());
+    let version = conflict.get("cloud_version").and_then(|v| v.as_i64()).unwrap_or(0);
+    let stamp = chrono::Local::now().format("%Y%m%d_%H%M").to_string();
+    let mut written = Vec::new();
+    for name in conflict.get("files").and_then(|v| v.as_array()).cloned().unwrap_or_default() {
+        let name = base_name(&str_of(Some(&name)));
+        let src = dir.join(&name);
+        if name.is_empty() || !src.is_file() { continue; }
+        let ext = name.rsplit_once('.').map(|(_, e)| e.to_lowercase()).unwrap_or_default();
+        let key = if ext == "f3d" { "file" } else { "step_file" };
+        let main = { let m = base_name(&str_of(meta.get(key))); if m.is_empty() { format!("{folder}.{ext}") } else { m } };
+        let main_path = dir.join(&main);
+        if use_cloud {
+            if main_path.is_file() {
+                fs::rename(&main_path, versions_path(dir, &format!("{folder}_lokalna_{stamp}.{ext}"))?)
+                    .map_err(|e| e.to_string())?;
+            }
+            fs::rename(&src, &main_path).map_err(|e| e.to_string())?;
+            if ext == "step" { meta["step_file"] = Value::String(main.clone()); }
+            written.push(main);
+        } else {
+            fs::rename(&src, versions_path(dir, &format!("{folder}_chmura_v{version}.{ext}"))?)
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    let obj = meta.as_object_mut().ok_or("Nieprawidłowy config.json.")?;
+    if use_cloud {
+        let mut synced = obj.get("synced_files").and_then(|v| v.as_object()).cloned().unwrap_or_default();
+        for name in written {
+            if let Some(fp) = fingerprint(&dir.join(&name)) { synced.insert(name, fp); }
+        }
+        obj.insert("synced_files".into(), Value::Object(synced));
+        obj.insert("cloud_version".into(), json!(version));
+        let v = obj.get("version").and_then(|v| v.as_i64()).unwrap_or(0).max(version);
+        obj.insert("version".into(), json!(v));
+        obj.remove("conflict_kept_version");
+    } else {
+        obj.insert("conflict_kept_version".into(), json!(version));
+    }
+    obj.remove("conflict");
+    write_json(&cfg, &meta)?;
+    Ok(meta)
 }
 
 /// Zmienia nazwę (albo miejsce w drzewie) kategorii razem z jej podkategoriami.
@@ -823,6 +933,21 @@ fn rename_category_cmd(state: State<AppState>, args: Value) -> Res {
 }
 
 #[tauri::command]
+fn resolve_conflict_cmd(state: State<AppState>, args: Value) -> Res {
+    let vault = state.vault()?;
+    let folder = arg_str(&args, "folder");
+    let dir = project_dir(&vault, &folder)?;
+    let use_cloud = match arg_str(&args, "use").as_str() {
+        "cloud" => true,
+        "local" => false,
+        _ => return Err("Nieznany wybór (cloud albo local).".into()),
+    };
+    let _g = state.write_lock.lock().unwrap();
+    let meta = resolve_conflict(&dir, use_cloud)?;
+    Ok(json!({ "ok": true, "projects": [project_item(&vault, &folder, &meta)] }))
+}
+
+#[tauri::command]
 fn open_folder(state: State<AppState>, args: Value) -> Res {
     let vault = state.vault()?;
     let folder = arg_str(&args, "folder");
@@ -940,6 +1065,7 @@ pub fn run() {
                 .and_then(|v| serde_json::from_value(v).ok())
                 .unwrap_or_default();
             add_detected_apps(&mut settings);
+            add_native_exts(&mut settings);
             if let Err(e) = install_menu_entry(std::env::var_os("APPIMAGE").map(PathBuf::from), &data_home()) {
                 eprintln!("Nie udało się dodać galerii do menu programów: {e}");
             }
@@ -962,7 +1088,7 @@ pub fn run() {
             });
         })
         .invoke_handler(tauri::generate_handler![
-            get_state, update_projects_cmd, save_categories_cmd, rename_category_cmd,
+            get_state, update_projects_cmd, save_categories_cmd, rename_category_cmd, resolve_conflict_cmd,
             open_folder, open_file, pick_vault, set_vault, save_settings
         ])
         .run(tauri::generate_context!())
@@ -1047,6 +1173,72 @@ mod category_tests {
         assert_eq!(tag(&d, "a"), NO_CATEGORY);
         assert_eq!(names(&d), ["Dom"]);
         let _ = fs::remove_dir_all(&d);
+    }
+}
+
+#[cfg(test)]
+mod conflict_tests {
+    use super::*;
+
+    fn setup(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("sl360_conf_{}_{name}", std::process::id())).join("Obudowa");
+        let _ = fs::remove_dir_all(dir.parent().unwrap());
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("Obudowa.f3d"), b"lokalna-zmieniona").unwrap();
+        fs::write(dir.join("Obudowa (chmura v7).f3d"), b"z-chmury").unwrap();
+        fs::write(dir.join("Obudowa.mitcad"), b"m").unwrap();
+        write_json(&dir.join("config.json"), &json!({
+            "file": "Obudowa.f3d", "cloud_version": 6, "version": 6,
+            "synced_files": { "Obudowa.f3d": [3, 0] },
+            "conflict": { "cloud_version": 7, "files": ["Obudowa (chmura v7).f3d"] }
+        })).unwrap();
+        dir
+    }
+
+    #[test]
+    fn use_cloud_and_keep_local() {
+        let d = setup("cloud");
+        let item = project_item(d.parent().unwrap(), "Obudowa", &read_json(&d.join("config.json")).unwrap());
+        let other: Vec<String> = item["other"].as_array().unwrap().iter().map(|v| str_of(v.get("name"))).collect();
+        assert_eq!(other, ["Obudowa (chmura v7).f3d", "Obudowa.mitcad"]);
+        assert_eq!(item["conflict"]["cloud_version"], 7);
+        let m = resolve_conflict(&d, true).unwrap();
+        assert_eq!(fs::read(d.join("Obudowa.f3d")).unwrap(), b"z-chmury");
+        assert!(!d.join("Obudowa (chmura v7).f3d").exists());
+        let kept: Vec<_> = fs::read_dir(d.join("versions")).unwrap().filter_map(|e| e.ok()).collect();
+        assert_eq!(kept.len(), 1);
+        assert_eq!(fs::read(kept[0].path()).unwrap(), b"lokalna-zmieniona");
+        assert_eq!(m["cloud_version"], 7);
+        assert_eq!(m["synced_files"]["Obudowa.f3d"][0], 8);
+        assert!(m.get("conflict").is_none());
+        assert!(resolve_conflict(&d, true).is_err());
+
+        let d = setup("local");
+        let m = resolve_conflict(&d, false).unwrap();
+        assert_eq!(fs::read(d.join("Obudowa.f3d")).unwrap(), b"lokalna-zmieniona");
+        assert!(d.join("versions/Obudowa_chmura_v7.f3d").is_file());
+        assert_eq!(m["conflict_kept_version"], 7);
+        assert_eq!(m["cloud_version"], 6);
+        let _ = fs::remove_dir_all(d.parent().unwrap());
+    }
+
+    #[test]
+    fn native_exts_added_once() {
+        let mut s = Settings {
+            apps: vec![
+                AppEntry { name: "MitCad".into(), command: "m %f".into(), exts: vec!["f3d".into(), "step".into()] },
+                AppEntry { name: "FreeCAD".into(), command: "f %f".into(), exts: vec!["step".into()] },
+                AppEntry { name: "Wszystko".into(), command: "x %f".into(), exts: vec![] },
+            ],
+            ..Default::default()
+        };
+        assert!(add_native_exts(&mut s));
+        assert_eq!(s.apps[0].exts, ["mitcad", "f3d", "step"]);
+        assert_eq!(s.apps[1].exts, ["fcstd", "step"]);
+        assert!(s.apps[2].exts.is_empty());
+        s.apps[0].exts.remove(0);
+        assert!(!add_native_exts(&mut s));
+        assert_eq!(s.apps[0].exts, ["f3d", "step"]);
     }
 }
 

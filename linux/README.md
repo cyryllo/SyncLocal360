@@ -86,6 +86,15 @@ Aplikacja sama dopisuje znalezione programy (każdy tylko raz – usunięty z li
 (np. `Mitcad-0.70.0-x86_64.AppImage` po aktualizacji do 0.71.0), aplikacja uruchamia najnowszy
 plik AppImage z tego samego katalogu o tym samym początku nazwy (`Mitcad…`).
 
-Pliki `.f3d` otwiera Fusion i **MitCad** (z historią projektu, czyli szkicami, operacjami i parametrami).
-Pozostałym programom wystarczą kopie `.step` (opcja „Dodatkowo eksportuj do STEP” w kopii z chmury).
-STEP to sama geometria, bez historii i parametrów z Fusion.
+Pliki `.f3d` otwiera Fusion; **MitCad** potrafi je zaimportować (z historią projektu), ale nie
+zawsze się to udaje, dlatego galeria podaje mu `.f3d` dopiero wtedy, gdy nie ma `.step`
+(przycisk „MitCad (import)”). Pozostałym programom wystarczą kopie `.step` (opcja „Dodatkowo
+eksportuj do STEP”). STEP to sama geometria, bez historii i parametrów z Fusion.
+
+Pracę z programu na Linuksie zapisuj w folderze projektu w jego własnym formacie
+(np. `Obudowa.mitcad`, `Obudowa.FCStd`). Galeria pokaże ten plik w „Plikach”, a dwuklik otworzy
+go zamiast STEP. Własny format to rozszerzenie programu spoza formatów wymiany (STEP, IGES, STL,
+3MF, `.f3d`…); dla MitCad (`mitcad`), FreeCAD (`fcstd`) i SolveSpace (`slvs`) galeria dopisuje je sama.
+
+Jeśli zmienisz na Linuksie sam `.f3d` albo `.step` z kopii, dodatek w Fusion go nie nadpisze –
+nowa wersja z chmury pojawi się obok, a w galerii wybierzesz, którą zostawić (⚠ zmiany lokalne).

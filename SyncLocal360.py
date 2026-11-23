@@ -11,7 +11,7 @@ Przyciski (karta Bryła -> panel SyncLocal360):
   * Kopia z chmury      - wsadowy zapis zaznaczonych projektów z chmury (+ opcjonalnie STEP)
   * Przywróć do chmury  - wsadowe wgranie plików .f3d z dysku do chmury
   * Galeria            - przeglądarka kopii w przeglądarce WWW (kategorie, etykiety)
-  * Ustawienia          - folder, autozapis, wersjonowanie
+  * Ustawienia          - folder, aktualizacja po zapisie w Fusion, autozapis, wersjonowanie
 """
 
 import sys
@@ -24,11 +24,13 @@ current_dir = os.path.dirname(os.path.realpath(__file__))
 if current_dir not in sys.path:
     sys.path.append(current_dir)
 
+import synclocal_files
 import synclocal_core
 import synclocal_backup
 import synclocal_restore
 import synclocal_gallery
 
+importlib.reload(synclocal_files)
 importlib.reload(synclocal_core)
 importlib.reload(synclocal_backup)
 importlib.reload(synclocal_restore)
@@ -124,6 +126,8 @@ class SettingsCommandExecuteHandler(adsk.core.CommandEventHandler):
             settings["versioning_enabled"] = inputs.itemById("versioningEnabled").value
             settings["ask_name_enabled"] = inputs.itemById("askNameEnabled").value
             settings["notify_on_save"] = inputs.itemById("notifyOnSave").value
+            settings["sync_on_save"] = inputs.itemById("syncOnSave").value
+            settings["backup_step"] = inputs.itemById("syncStep").value
             synclocal_core.save_settings(settings)
             synclocal_core.restart_autosave_timer()
         except Exception:
@@ -154,10 +158,19 @@ class SettingsCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
 
             inputs.addStringValueInput("vaultDir", "Folder zapisu", settings["vault_dir"]).isReadOnly = True
             inputs.addBoolValueInput("browseFolderBtn", "Wybierz folder...", False, "", False)
-            inputs.addBoolValueInput("autosaveEnabled", "Autozapis włączony", True, "", settings["autosave_enabled"])
+            inputs.addBoolValueInput("syncOnSave", "Po zapisie w Fusion aktualizuj kopię w folderze",
+                                     True, "", settings.get("sync_on_save", True))
+            inputs.addBoolValueInput("syncStep", "Eksportuj też STEP (kopia i aktualizacja)",
+                                     True, "", settings.get("backup_step", False))
+            inputs.addTextBoxCommandInput(
+                "syncInfo", "",
+                "Pliki zmienione poza Fusion (np. na Linuksie) nie są nadpisywane – wersja z chmury "
+                "trafia obok jako „nazwa (chmura vN).f3d”, a w galerii wybierasz, którą zostawić.",
+                3, True)
+            inputs.addBoolValueInput("autosaveEnabled", "Autozapis niezapisanych zmian", True, "", settings["autosave_enabled"])
             inputs.addValueInput("autosaveInterval", "Interwał autozapisu (min)", "",
                                  adsk.core.ValueInput.createByReal(settings["autosave_interval_min"]))
-            inputs.addBoolValueInput("versioningEnabled", "Szybki Zapis: twórz nowe wersje zamiast nadpisywać",
+            inputs.addBoolValueInput("versioningEnabled", "Szybki Zapis i autozapis: zachowuj poprzednie wersje (versions/)",
                                      True, "", settings["versioning_enabled"])
             inputs.addBoolValueInput("askNameEnabled", "Pytaj o nazwę przed zapisem (plik bez nazwy)",
                                      True, "", settings.get("ask_name_enabled", False))
@@ -230,7 +243,8 @@ def run(context):
              'Otwiera w przeglądarce galerię lokalnych kopii: kategorie, etykiety, notatki, '
              'otwieranie i wstawianie projektów',
              ICON_GALLERY, GalleryCommandCreatedHandler(), None),
-            (CMD_SETTINGS_ID, 'Ustawienia SyncLocal360', 'Folder zapisu, autozapis, wersjonowanie',
+            (CMD_SETTINGS_ID, 'Ustawienia SyncLocal360',
+             'Folder kopii, aktualizacja po zapisie w Fusion, autozapis, wersjonowanie',
              ICON_SETTINGS, SettingsCommandCreatedHandler(), None),
         ]
         for cmd_id, name, desc, icon, handler, starter in buttons:
@@ -242,12 +256,14 @@ def run(context):
                 ui.messageBox(f'SyncLocal360: błąd dodawania przycisku „{name}”:\n{traceback.format_exc()}')
 
         synclocal_core.start_autosave()
+        synclocal_core.start_sync()
     except Exception:
         ui.messageBox('Krytyczny błąd ładowania SyncLocal360:\n{}'.format(traceback.format_exc()))
 
 
 def stop(context):
     try:
+        synclocal_core.stop_sync()
         synclocal_core.stop_autosave()
         synclocal_backup.stop()
         synclocal_restore.stop()

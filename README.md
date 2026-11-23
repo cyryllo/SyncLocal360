@@ -100,11 +100,29 @@ Wskazówki:
 
 | Przycisk | Co robi |
 |---|---|
-| **Szybki Zapis** | zapisuje aktywny projekt na dysk (`.f3d` + miniatura) |
+| **Szybki Zapis** | zapisuje aktywny projekt na dysk (`.f3d` + miniatura); plik z chmury trafia do tego samego folderu co „Kopia z chmury” |
 | **Kopia z chmury** | zapisuje zaznaczone projekty lub pojedyncze pliki z chmury (najnowsza wersja, `.f3d`, opcjonalnie `.step`) |
 | **Przywróć do chmury** | wgrywa pliki `.f3d` z dysku do chmury, odtwarzając projekty i foldery (np. na nowe konto) |
 | **Galeria** | otwiera galerię kopii w przeglądarce (kategorie, etykiety, „Otwórz w Fusion”, „Wstaw do projektu”) |
-| **Ustawienia** | folder zapisu, autozapis, wersjonowanie |
+| **Ustawienia** | folder kopii, aktualizacja po zapisie w Fusion, STEP, autozapis, wersjonowanie |
+
+### Automatyczna aktualizacja kopii
+
+Po każdym zapisie projektu w Fusion (Ctrl+S) dodatek sam aktualizuje jego kopię w folderze
+kopii: `.f3d`, miniaturę i – jeśli włączone – `.step`. Kopia trafia do tego samego folderu
+co z „Kopii z chmury”, więc nie powstają duplikaty. Można to wyłączyć w Ustawieniach.
+Folder kopii ustawia się w Ustawieniach albo w oknie „Kopia z chmury” (ostatnio użyty
+folder kopii jest zapamiętywany). Krótki log: `sync_log.txt` w folderze kopii.
+
+**Autozapis** (opcjonalny, co N minut) zapisuje już tylko projekty z niezapisanymi zmianami.
+Z włączonym wersjonowaniem poprzedni `.f3d` trafia do `versions/`.
+
+**Pliki zmienione poza Fusion nie są nadpisywane.** Jeśli `.f3d` albo `.step` w kopii
+zmieniono np. na Linuksie, ani aktualizacja po zapisie, ani „Kopia z chmury” go nie nadpisze –
+nowa wersja z chmury trafia obok jako `Nazwa (chmura v12).f3d`, a projekt dostaje w galerii
+oznaczenie **⚠ zmiany lokalne**. W panelu projektu wybierasz **Użyj wersji z chmury** albo
+**Zostaw moją**; odrzucona wersja trafia do `versions/`, nic nie jest kasowane.
+Dodatek rozpoznaje zmiany po rozmiarze i dacie pliku zapamiętanych przy zapisie.
 
 <p>
   <img src="docs/img/fusion-kopia.png" width="300" alt="Okno Kopia z chmury">
@@ -177,6 +195,11 @@ Co potrafi:
 
 - **Otwieranie plików w wybranych programach.** W ustawieniach (zębatka) dodajesz programy
   i decydujesz, który uruchamia się po **dwukliku** na miniaturze.
+- **Pliki programów z Linuksa.** Zapisz pracę z programu w folderze projektu we własnym formacie
+  programu (np. `Obudowa.mitcad`, `Obudowa.FCStd`) – galeria pokaże go w „Plikach” obok `.step`
+  i `.f3d`. Dwuklik otwiera najpierw taki plik (w programie, do którego należy rozszerzenie),
+  a gdy go nie ma – `.step`. `.f3d` to format Fusion: inne programy go tylko importują,
+  więc dostają go dopiero, gdy nie ma `.step` (przycisk „MitCad (import)”).
 
   ![Ustawienia programów](docs/img/ustawienia.png)
 
@@ -184,14 +207,15 @@ Co potrafi:
 
   | Program | Polecenie |
   |---|---|
-  | MitCad (AppImage, otwiera też `.f3d`) | `~/Pulpit/Mitcad-0.70.0-x86_64.AppImage %f` |
+  | MitCad (AppImage, importuje też `.f3d`) | `~/Pulpit/Mitcad-0.70.0-x86_64.AppImage %f` |
   | FreeCAD (Flatpak) | `flatpak run org.freecad.FreeCAD %f` |
   | FreeCAD (pakiet) | `freecad %f` |
   | Dowolny AppImage | `~/Aplikacje/Program.AppImage %f` |
 
-  MitCad i FreeCAD galeria znajduje i dopisuje sama. MitCad otwiera pliki `.f3d` z historią
-  projektu, więc po dwukliku dostaje `.f3d` (inne programy dostają `.step`). Gdy AppImage
-  zaktualizujesz do nowszej wersji, galeria sama znajdzie nowy plik w tym samym folderze.
+  MitCad i FreeCAD galeria znajduje i dopisuje sama, razem z ich własnymi formatami
+  (`mitcad`, `fcstd`). Rozszerzenia spoza formatów wymiany (STEP, IGES, STL, 3MF, `.f3d`…)
+  galeria traktuje jako własny format programu. Gdy AppImage zaktualizujesz do nowszej wersji,
+  galeria sama znajdzie nowy plik w tym samym folderze.
 
   FreeCAD otwierany z wiersza poleceń nie dopasowuje widoku do modelu (modele z Fusion bywają
   niewidoczne albo mocno przybliżone). Galeria sama to naprawia: przekazuje mu małe makro,
